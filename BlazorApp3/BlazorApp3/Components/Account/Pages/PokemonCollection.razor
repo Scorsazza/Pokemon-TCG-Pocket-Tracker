@@ -1,0 +1,385 @@
+﻿@page "/pokemon-collection"
+@using System.Security.Claims
+@using BlazorApp3.Data.Models
+@using BlazorApp3.Services
+@inject AuthenticationStateProvider AuthState
+@inject IPokemonCollectionService CollectionSvc
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+@inherits ComponentBase
+
+<PageTitle>Pokémon TCG Pocket Collection Tracker</PageTitle>
+
+<div class="container mt-4">
+    <h1 class="mb-4">🏆 My Pokémon Collection</h1>
+
+    <AuthorizeView>
+        <Authorized>
+            <!-- Controls Row -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <button class="btn btn-primary w-100" @onclick="Sync" disabled="@isSyncing">
+                        @(isSyncing ? "🔄 Syncing..." : "🔄 Sync Cards")
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <input type="text" class="form-control" placeholder="🔍 Search cards..."
+                           @bind="searchTerm" @oninput="OnSearchChanged" />
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" @bind="sortBy" @bind:after="ApplyFilters">
+                        <option value="name">Sort by Name</option>
+                        <option value="pack">Sort by Pack</option>
+                        <option value="rarity">Sort by Rarity</option>
+                        <option value="quantity">Sort by Quantity</option>
+                        <option value="newest">Sort by Newest</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Filters Row -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <select class="form-select" @bind="selectedPack" @bind:after="ApplyFilters">
+                        <option value="">All Packs</option>
+                        @foreach (var pack in availablePacks)
+                        {
+                            <option value="@pack">@pack</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" @bind="selectedRarity" @bind:after="ApplyFilters">
+                        <option value="">All Rarities</option>
+                        @foreach (var rarity in availableRarities)
+                        {
+                            <option value="@rarity">@rarity</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" @bind="tradeFilter" @bind:after="ApplyFilters">
+                        <option value="all">All Cards</option>
+                        <option value="trade">For Trade</option>
+                        <option value="keep">Keeping</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-secondary w-100" @onclick="ClearFilters">
+                        Clear Filters
+                    </button>
+                </div>
+            </div>
+
+            @if (isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading your collection...</p>
+                </div>
+            }
+            else if (!string.IsNullOrEmpty(error))
+            {
+                <div class="alert alert-danger">
+                    @error
+                    <button class="btn btn-sm btn-secondary ms-2" @onclick="Load">Retry</button>
+                </div>
+            }
+            else
+            {
+                <!-- Stats Row -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-md-3">
+                                        <h5 class="text-primary mb-0">@userStats.TotalCards</h5>
+                                        <small class="text-muted">Total Cards</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <h5 class="text-success mb-0">@userStats.UniqueCards</h5>
+                                        <small class="text-muted">Unique Cards</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <h5 class="text-info mb-0">@userStats.CompletionPercentage%</h5>
+                                        <small class="text-muted">Completion</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <h5 class="text-warning mb-0">@filteredCards.Count</h5>
+                                        <small class="text-muted">Showing</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @if (!filteredCards.Any())
+                {
+                    <div class="text-center py-5">
+                        <h4 class="text-muted">No cards found</h4>
+                        <p class="text-muted">Try adjusting your search or filters</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-4">
+                        @foreach (var c in filteredCards)
+                        {
+                            <div class="col">
+                                <div class="card h-100">
+                                    <img src="@c.ImageUrl" class="card-img-top" alt="@c.Name"
+                                         style="width: 100%; height: auto; object-fit: contain;" />
+                                    <div class="card-body">
+                                        <h6 class="card-title">@c.Name</h6>
+                                        <p class="card-text small">
+                                            <strong>Pack:</strong> @c.Pack<br />
+                                            <strong>#:</strong> @c.CardNumber • <strong>Qty:</strong> @c.Quantity<br />
+                                            <span class="badge bg-secondary">@c.Rarity</span>
+                                        </p>
+                                        <div class="d-grid gap-2">
+                                            <button class="btn @(c.IsCollected ? "btn-danger" : "btn-success") btn-sm"
+                                                    @onclick="() => ToggleCard(c.CardId)">
+                                                @(c.IsCollected ? "Remove" : "Add")
+                                            </button>
+                                            @if (c.IsCollected)
+                                            {
+                                                <button class="btn @(c.IsForTrade ? "btn-warning" : "btn-outline-secondary") btn-sm"
+                                                        @onclick="() => ToggleTrade(c.CardId)">
+                                                    @(c.IsForTrade ? "🏷️ For Trade" : "💎 Keep")
+                                                </button>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </Authorized>
+        <NotAuthorized>
+            <div class="alert alert-warning">
+                You must <a href="Identity/Account/Login" class="alert-link">log in</a> to view and manage your collection.
+            </div>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@code {
+    private bool isLoading = true;
+    private bool isSyncing = false;
+    private string? error;
+    private List<ViewCard> viewCards = new();
+    private List<ViewCard> filteredCards = new();
+    private UserStatsDto userStats = new();
+
+    // Filter and sort properties
+    private string searchTerm = "";
+    private string sortBy = "name";
+    private string selectedPack = "";
+    private string selectedRarity = "";
+    private string tradeFilter = "all";
+
+    // Available options for filters
+    private List<string> availablePacks = new();
+    private List<string> availableRarities = new();
+
+    public record ViewCard(
+        string CardId,
+        string Name,
+        string Pack,
+        string Rarity,
+        string CardNumber,
+        string ImageUrl,
+        bool IsCollected,
+        int Quantity,
+        bool IsForTrade
+    );
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        if (auth.User.Identity?.IsAuthenticated == true)
+        {
+            await Load();
+        }
+    }
+
+    private async Task Load()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            var auth = await AuthState.GetAuthenticationStateAsync();
+            var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)!.Value;
+
+            // Only get cards that are actually collected (isCollected: true)
+            var owned = await CollectionSvc.GetMyCollectionAsync(uid, isCollected: true);
+
+            viewCards = owned.Select(o => new ViewCard(
+                o.CardId, o.Name, o.Pack, o.Rarity, o.CardNumber, o.ImageUrl,
+                true, // All these cards are collected since we filtered for them
+                o.Quantity,
+                o.IsForTrade
+            )).ToList();
+
+            // Populate filter options
+            availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
+            availableRarities = viewCards.Select(c => c.Rarity).Distinct().OrderBy(r => r).ToList();
+
+            userStats = await CollectionSvc.GetUserStatsAsync(uid);
+
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task Sync()
+    {
+        isSyncing = true;
+        try
+        {
+            await CollectionSvc.SyncCardsFromApiAsync();
+            await Load();
+            await JS.InvokeVoidAsync("alert", "Cards synchronized successfully!");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Sync failed: {ex.Message}");
+        }
+        finally
+        {
+            isSyncing = false;
+        }
+    }
+
+    private async Task ToggleCard(string cardId)
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)!.Value;
+
+        var c = viewCards.First(x => x.CardId == cardId);
+        if (c.IsCollected)
+            await CollectionSvc.RemoveCardAsync(uid, cardId);
+        else
+            await CollectionSvc.AddCardAsync(uid, new AddCardRequest { CardId = cardId, Quantity = 1 });
+
+        await Load();
+    }
+
+    private async Task ToggleTrade(string cardId)
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)!.Value;
+
+        await CollectionSvc.ToggleTradeAsync(uid, cardId);
+        await Load();
+    }
+
+    private void ApplyFilters()
+    {
+        var filtered = viewCards.AsEnumerable();
+
+        // Apply search
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            filtered = filtered.Where(c =>
+                c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                c.Pack.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                c.CardNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Apply pack filter
+        if (!string.IsNullOrEmpty(selectedPack))
+        {
+            filtered = filtered.Where(c => c.Pack == selectedPack);
+        }
+
+        // Apply rarity filter
+        if (!string.IsNullOrEmpty(selectedRarity))
+        {
+            filtered = filtered.Where(c => c.Rarity == selectedRarity);
+        }
+
+        // Apply trade filter
+        if (tradeFilter == "trade")
+        {
+            filtered = filtered.Where(c => c.IsForTrade);
+        }
+        else if (tradeFilter == "keep")
+        {
+            filtered = filtered.Where(c => !c.IsForTrade);
+        }
+        // "all" case - no additional filtering
+
+        // Apply sorting
+        if (sortBy == "name")
+        {
+            filtered = filtered.OrderBy(c => c.Name);
+        }
+        else if (sortBy == "pack")
+        {
+            filtered = filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber);
+        }
+        else if (sortBy == "rarity")
+        {
+            filtered = filtered.OrderBy(c => GetRarityOrder(c.Rarity)).ThenBy(c => c.Name);
+        }
+        else if (sortBy == "quantity")
+        {
+            filtered = filtered.OrderByDescending(c => c.Quantity).ThenBy(c => c.Name);
+        }
+        else if (sortBy == "newest")
+        {
+            filtered = filtered.OrderBy(c => c.CardNumber);
+        }
+        else
+        {
+            filtered = filtered.OrderBy(c => c.Name);
+        }
+
+        filteredCards = filtered.ToList();
+        StateHasChanged();
+    }
+
+    private void OnSearchChanged(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+        ApplyFilters();
+    }
+
+    private void ClearFilters()
+    {
+        searchTerm = "";
+        selectedPack = "";
+        selectedRarity = "";
+        tradeFilter = "all";
+        sortBy = "name";
+        ApplyFilters();
+    }
+
+    private int GetRarityOrder(string rarity)
+    {
+        return rarity switch
+        {
+            "Common" => 1,
+            "Uncommon" => 2,
+            "Rare" => 3,
+            "Ultra Rare" => 4,
+            _ => 5
+        };
+    }
+}

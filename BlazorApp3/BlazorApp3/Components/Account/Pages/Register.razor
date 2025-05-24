@@ -1,0 +1,176 @@
+﻿@page "/Account/Register"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using BlazorApp3.Data
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IUserStore<ApplicationUser> UserStore
+@inject SignInManager<ApplicationUser> SignInManager
+@inject ILogger<Register> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Register</PageTitle>
+
+
+
+<div class="register-container" style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; background: linear-gradient(135deg, #1a1b23 0%, #2d1b69 100%); color: #e2e8f0;">
+    <div class="register-card" style="background: #2a2d3a; border-radius: 20px; box-shadow: 0 20px 50px rgba(139, 92, 246, 0.1); padding: 3rem; width: 100%; max-width: 450px; border: 1px solid rgba(139, 92, 246, 0.1);">
+        <h1 style="color: #e2e8f0; font-weight: 700; font-size: 2rem; margin-bottom: 0.5rem; text-align: center;">Create Account</h1>
+        <p style="color: #94a3b8; text-align: center; margin-bottom: 2rem;">Join us today and get started</p>
+
+        @if (!string.IsNullOrEmpty(Message))
+        {
+            <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #ef4444; border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
+                @Message
+            </div>
+        }
+
+        <EditForm Model="Input" asp-route-returnUrl="@ReturnUrl" method="post" OnValidSubmit="RegisterUser" FormName="register">
+            <DataAnnotationsValidator />
+
+            <div style="position: relative; margin-bottom: 1.5rem;">
+                <InputText @bind-Value="Input.Username"
+                           id="Input.Username"
+                           style="width: 100%; padding: 1rem; background: #374151; border: 2px solid #374151; border-radius: 12px; color: #e2e8f0; font-size: 1rem; outline: none;"
+                           autocomplete="username"
+                           aria-required="true"
+                           placeholder="Username"
+                           onfocus="this.style.borderColor='#8b5cf6'; this.style.boxShadow='0 0 0 3px rgba(139, 92, 246, 0.1)'"
+                           onblur="this.style.borderColor='#374151'; this.style.boxShadow='none'" />
+                <ValidationMessage For="() => Input.Username" style="color: #ef4444; font-size: 0.875rem; margin-top: 0.5rem; display: block;" />
+            </div>
+
+            <div style="position: relative; margin-bottom: 1.5rem;">
+                <InputText type="password"
+                           @bind-Value="Input.Password"
+                           id="Input.Password"
+                           style="width: 100%; padding: 1rem; background: #374151; border: 2px solid #374151; border-radius: 12px; color: #e2e8f0; font-size: 1rem; outline: none;"
+                           autocomplete="new-password"
+                           aria-required="true"
+                           placeholder="Password"
+                           onfocus="this.style.borderColor='#8b5cf6'; this.style.boxShadow='0 0 0 3px rgba(139, 92, 246, 0.1)'"
+                           onblur="this.style.borderColor='#374151'; this.style.boxShadow='none'" />
+                <ValidationMessage For="() => Input.Password" style="color: #ef4444; font-size: 0.875rem; margin-top: 0.5rem; display: block;" />
+            </div>
+
+            <div style="position: relative; margin-bottom: 1.5rem;">
+                <InputText type="password"
+                           @bind-Value="Input.ConfirmPassword"
+                           id="Input.ConfirmPassword"
+                           style="width: 100%; padding: 1rem; background: #374151; border: 2px solid #374151; border-radius: 12px; color: #e2e8f0; font-size: 1rem; outline: none;"
+                           autocomplete="new-password"
+                           aria-required="true"
+                           placeholder="Confirm Password"
+                           onfocus="this.style.borderColor='#8b5cf6'; this.style.boxShadow='0 0 0 3px rgba(139, 92, 246, 0.1)'"
+                           onblur="this.style.borderColor='#374151'; this.style.boxShadow='none'" />
+                <ValidationMessage For="() => Input.ConfirmPassword" style="color: #ef4444; font-size: 0.875rem; margin-top: 0.5rem; display: block;" />
+            </div>
+
+            <button type="submit"
+                    style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); border: none; border-radius: 25px; color: white; font-weight: 600; font-size: 1.1rem; padding: 1rem 2rem; width: 100%; cursor: pointer; transition: all 0.3s ease; @(isLoading ? "opacity: 0.6; cursor: not-allowed;" : "")"
+                    disabled="@isLoading"
+                    onmouseover="if(!this.disabled) { this.style.transform='translateY(-2px)'; this.style.boxShadow='0 15px 35px rgba(139, 92, 246, 0.3)'; }"
+                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';">
+                @if (isLoading)
+                {
+                    <span>Creating Account...</span>
+                }
+                else
+                {
+                    <span>Create Account</span>
+                }
+            </button>
+        </EditForm>
+
+        <div style="text-align: center; margin-top: 1.5rem; color: #94a3b8;">
+            Already have an account?
+            <a href="/Account/Login" style="color: #8b5cf6; text-decoration: none; font-weight: 500;" onmouseover="this.style.color='#7c3aed'; this.style.textDecoration='underline'" onmouseout="this.style.color='#8b5cf6'; this.style.textDecoration='none'">Sign in here</a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IEnumerable<IdentityError>? identityErrors;
+    private bool isLoading = false;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private string? Message => identityErrors is null ? null : $"Error: {string.Join(", ", identityErrors.Select(error => error.Description))}";
+
+    public async Task RegisterUser(EditContext editContext)
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var user = CreateUser();
+
+            // Set the username as the primary identifier
+            await UserStore.SetUserNameAsync(user, Input.Username, CancellationToken.None);
+
+            var result = await UserManager.CreateAsync(user, Input.Password);
+
+            if (!result.Succeeded)
+            {
+                identityErrors = result.Errors;
+                return;
+            }
+
+            Logger.LogInformation("User created a new account with password.");
+
+            // Sign in the user immediately after registration
+            await SignInManager.SignInAsync(user, isPersistent: false);
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private ApplicationUser CreateUser()
+    {
+        try
+        {
+            return Activator.CreateInstance<ApplicationUser>();
+        }
+        catch
+        {
+            throw new InvalidOperationException($"Can't create an instance of '{nameof(ApplicationUser)}'. " +
+                $"Ensure that '{nameof(ApplicationUser)}' is not an abstract class and has a parameterless constructor.");
+        }
+    }
+
+    private IUserStore<ApplicationUser> GetUserStore()
+    {
+        return UserStore;
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [StringLength(50, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 3)]
+        [RegularExpression(@"^[a-zA-Z0-9_]+$", ErrorMessage = "Username can only contain letters, numbers, and underscores.")]
+        [Display(Name = "Username")]
+        public string Username { get; set; } = "";
+
+        [Required]
+        [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [DataType(DataType.Password)]
+        [Display(Name = "Password")]
+        public string Password { get; set; } = "";
+
+        [DataType(DataType.Password)]
+        [Display(Name = "Confirm password")]
+        [Compare("Password", ErrorMessage = "The password and confirmation password do not match.")]
+        public string ConfirmPassword { get; set; } = "";
+    }
+}
