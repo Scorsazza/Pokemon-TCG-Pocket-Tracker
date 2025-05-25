@@ -12,8 +12,29 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using System;
 using System.Threading.Tasks;
+
+static string BuildConnectionStringFromUrl(string databaseUrl)
+{
+    // Parses Fly.io DATABASE_URL into a Npgsql connection string
+    // e.g. "postgres://user:pass@host:5432/dbname?sslmode=disable"
+    var uri = new Uri(databaseUrl);
+    var userInfo = uri.UserInfo.Split(':', 2);
+    var builder = new NpgsqlConnectionStringBuilder
+    {
+        Host = uri.Host,
+        Port = uri.Port,
+        Username = userInfo[0],
+        Password = userInfo[1],
+        Database = uri.AbsolutePath.TrimStart('/'),
+        // Determine SSL mode from query string
+        SslMode = uri.Query.Contains("sslmode=require") ? SslMode.Require : SslMode.Disable,
+        TrustServerCertificate = true
+    };
+    return builder.ToString();
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,10 +59,15 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 // 3) EF Core + Identity stores
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-                       ?? throw new InvalidOperationException("Missing DefaultConnection");
+// Attempt to read Fly.io DATABASE_URL, fall back to DefaultConnection in appsettings
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+var connectionString = !string.IsNullOrEmpty(databaseUrl)
+    ? BuildConnectionStringFromUrl(databaseUrl)
+    : builder.Configuration.GetConnectionString("DefaultConnection")
+      ?? throw new InvalidOperationException("Missing DefaultConnection");
+
 builder.Services.AddDbContext<ApplicationDbContext>(opts =>
-    opts.UseSqlServer(connectionString));
+    opts.UseNpgsql(connectionString));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
