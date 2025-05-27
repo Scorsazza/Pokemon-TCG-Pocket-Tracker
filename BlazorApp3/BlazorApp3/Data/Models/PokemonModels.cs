@@ -14,6 +14,9 @@ namespace BlazorApp3.Data.Models
         [MaxLength(200)]
         public string Name { get; set; } = "";
 
+        [MaxLength(100)]
+        public string Expansion { get; set; } = "";
+
         [Required]
         [MaxLength(100)]
         public string Pack { get; set; } = "";
@@ -30,6 +33,7 @@ namespace BlazorApp3.Data.Models
 
         [MaxLength(50)]
         public string Type { get; set; } = "";
+
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

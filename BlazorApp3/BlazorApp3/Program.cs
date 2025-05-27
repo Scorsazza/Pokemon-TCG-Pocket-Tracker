@@ -37,11 +37,11 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// 3) EF Core + Identity stores
+// 3) EF Core + Identity stores - CHANGED TO SQLITE
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-                       ?? throw new InvalidOperationException("Missing DefaultConnection");
+                       ?? "Data Source=app.db"; // Default SQLite connection string
 builder.Services.AddDbContext<ApplicationDbContext>(opts =>
-    opts.UseSqlServer(connectionString));
+    opts.UseSqlite(connectionString)); // Changed from UseSqlServer to UseSqlite
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
@@ -122,12 +122,14 @@ app.MapRazorComponents<App>()
 // Simple test
 app.MapGet("/api/test", () => "API works!");
 
-// Ensure DB & seed
+// Ensure DB & seed - CHANGED TO USE MIGRATE INSTEAD OF ENSURECREATED
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var um = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-    ctx.Database.EnsureCreated();
+
+    // Use Migrate() instead of EnsureCreated() for better SQLite support
+    await ctx.Database.MigrateAsync();
     await SeedInitialData(ctx, um);
 }
 

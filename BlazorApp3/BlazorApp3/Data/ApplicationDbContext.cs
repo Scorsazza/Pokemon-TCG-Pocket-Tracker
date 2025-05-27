@@ -4,8 +4,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using BlazorApp3.Data.Models;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace BlazorApp3.Data
 {
@@ -26,6 +28,12 @@ namespace BlazorApp3.Data
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+
+            // Configure Identity entities for SQLite compatibility
+            if (Database.IsSqlite())
+            {
+                ConfigureIdentityForSqlite(builder);
+            }
 
             // PokemonCard configuration
             builder.Entity<PokemonCard>(entity =>
@@ -117,12 +125,90 @@ namespace BlazorApp3.Data
             });
         }
 
+        private void ConfigureIdentityForSqlite(ModelBuilder builder)
+        {
+            // Configure Identity entities with SQLite-compatible column types and sizes
+            builder.Entity<IdentityRole>(entity =>
+            {
+                entity.Property(e => e.Id).HasMaxLength(85);
+                entity.Property(e => e.Name).HasMaxLength(256);
+                entity.Property(e => e.NormalizedName).HasMaxLength(256);
+                entity.Property(e => e.ConcurrencyStamp).HasColumnType("TEXT");
+            });
+
+            builder.Entity<ApplicationUser>(entity =>
+            {
+                entity.Property(e => e.Id).HasMaxLength(85);
+                entity.Property(e => e.UserName).HasMaxLength(256);
+                entity.Property(e => e.NormalizedUserName).HasMaxLength(256);
+                entity.Property(e => e.Email).HasMaxLength(256);
+                entity.Property(e => e.NormalizedEmail).HasMaxLength(256);
+                entity.Property(e => e.PasswordHash).HasColumnType("TEXT");
+                entity.Property(e => e.SecurityStamp).HasColumnType("TEXT");
+                entity.Property(e => e.ConcurrencyStamp).HasColumnType("TEXT");
+                entity.Property(e => e.PhoneNumber).HasMaxLength(50);
+            });
+
+            builder.Entity<IdentityUserClaim<string>>(entity =>
+            {
+                entity.Property(e => e.UserId).HasMaxLength(85);
+                entity.Property(e => e.ClaimType).HasColumnType("TEXT");
+                entity.Property(e => e.ClaimValue).HasColumnType("TEXT");
+            });
+
+            builder.Entity<IdentityUserLogin<string>>(entity =>
+            {
+                entity.Property(e => e.LoginProvider).HasMaxLength(85);
+                entity.Property(e => e.ProviderKey).HasMaxLength(85);
+                entity.Property(e => e.ProviderDisplayName).HasMaxLength(256);
+                entity.Property(e => e.UserId).HasMaxLength(85);
+            });
+
+            builder.Entity<IdentityUserToken<string>>(entity =>
+            {
+                entity.Property(e => e.UserId).HasMaxLength(85);
+                entity.Property(e => e.LoginProvider).HasMaxLength(85);
+                entity.Property(e => e.Name).HasMaxLength(85);
+                entity.Property(e => e.Value).HasColumnType("TEXT");
+            });
+
+            builder.Entity<IdentityUserRole<string>>(entity =>
+            {
+                entity.Property(e => e.UserId).HasMaxLength(85);
+                entity.Property(e => e.RoleId).HasMaxLength(85);
+            });
+
+            builder.Entity<IdentityRoleClaim<string>>(entity =>
+            {
+                entity.Property(e => e.RoleId).HasMaxLength(85);
+                entity.Property(e => e.ClaimType).HasColumnType("TEXT");
+                entity.Property(e => e.ClaimValue).HasColumnType("TEXT");
+            });
+
+            // Additional fix for any remaining nvarchar(max) issues
+            foreach (var entity in builder.Model.GetEntityTypes())
+            {
+                foreach (var property in entity.GetProperties())
+                {
+                    var columnType = property.GetColumnType();
+                    if (!string.IsNullOrEmpty(columnType))
+                    {
+                        if (columnType.Contains("nvarchar(max)", StringComparison.OrdinalIgnoreCase) ||
+                            columnType.Contains("varchar(max)", StringComparison.OrdinalIgnoreCase) ||
+                            columnType.Contains("ntext", StringComparison.OrdinalIgnoreCase) ||
+                            columnType.Contains("text", StringComparison.OrdinalIgnoreCase))
+                        {
+                            property.SetColumnType("TEXT");
+                        }
+                    }
+                }
+            }
+        }
+
         public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
-            // Update timestamps on modified PokemonCards
             var now = DateTime.UtcNow;
-            foreach (var entry in ChangeTracker.Entries<PokemonCard>()
-                                               .Where(e => e.State == EntityState.Modified))
+            foreach (var entry in ChangeTracker.Entries<PokemonCard>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Entity.UpdatedAt = now;
             }
@@ -140,7 +226,6 @@ namespace BlazorApp3.Data
             string? rarityFilter = null,
             bool? isCollectedFilter = null)
         {
-            // INNER JOIN so only truly-owned cards are returned
             var query = from uc in context.UserCards
                         where uc.UserId == userId
                         join card in context.PokemonCards on uc.CardId equals card.Id
@@ -164,8 +249,6 @@ namespace BlazorApp3.Data
 
             if (!string.IsNullOrEmpty(rarityFilter))
                 query = query.Where(c => c.Rarity == rarityFilter);
-
-            // isCollectedFilter no longer needed, as collection is always "collected"
 
             return await query
                 .OrderBy(c => c.Pack)

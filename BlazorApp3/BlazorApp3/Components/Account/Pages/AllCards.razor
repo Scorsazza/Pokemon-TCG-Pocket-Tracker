@@ -15,11 +15,11 @@
 
     <!-- Controls Row -->
     <div class="row mb-4">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <input type="text" class="form-control" placeholder="🔍 Search cards..."
                    @bind="searchTerm" @oninput="OnSearchChanged" />
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <select class="form-select" @bind="sortBy" @bind:after="ApplyFilters">
                 <option value="name">Sort by Name</option>
                 <option value="pack">Sort by Pack</option>
@@ -27,7 +27,16 @@
                 <option value="newest">Sort by Newest</option>
             </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
+            <select class="form-select" @bind="selectedExpansion" @bind:after="ApplyFilters">
+                <option value="">All Expansions</option>
+                @foreach (var expansion in availableExpansions)
+                {
+                    <option value="@expansion">@expansion</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
             <button class="btn btn-outline-secondary w-100" @onclick="ClearFilters">
                 Clear Filters
             </button>
@@ -63,85 +72,38 @@
         </div>
     </div>
 
-    @if (isLoading)
-    {
-        <div class="text-center py-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2">Loading all cards...</p>
-        </div>
-    }
-    else if (error is not null)
-    {
-        <div class="alert alert-danger">
-            @error
-            <button class="btn btn-sm btn-secondary ms-2" @onclick="Load">Retry</button>
-        </div>
-    }
-    else
-    {
-        <!-- Stats Row -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card bg-light">
-                    <div class="card-body">
-                        <div class="row text-center">
-                            <div class="col-md-4">
-                                <h5 class="text-primary mb-0">@viewCards.Count</h5>
-                                <small class="text-muted">Total Available</small>
-                            </div>
-                            <div class="col-md-4">
-                                <h5 class="text-success mb-0">@viewCards.Count(c => c.IsCollected)</h5>
-                                <small class="text-muted">You Own</small>
-                            </div>
-                            <div class="col-md-4">
-                                <h5 class="text-warning mb-0">@filteredCards.Count</h5>
-                                <small class="text-muted">Showing</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        @if (!filteredCards.Any())
+    <!-- Cards Display -->
+    <div class="row">
+        @if (isLoading)
         {
-            <div class="text-center py-5">
-                <h4 class="text-muted">No cards found</h4>
-                <p class="text-muted">Try adjusting your search or filters</p>
-            </div>
+            <div class="text-center">Loading cards...</div>
+        }
+        else if (!string.IsNullOrEmpty(error))
+        {
+            <div class="text-danger">@error</div>
+        }
+        else if (!filteredCards.Any())
+        {
+            <div class="text-muted">No cards match the current filters.</div>
         }
         else
         {
-            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-4">
-                @foreach (var c in filteredCards)
-                {
-                    <div class="col">
-                        <div class="card h-100">
-                            <img src="@c.ImageUrl" class="card-img-top" alt="@c.Name"
-                                 style="width: 100%; height: auto; object-fit: contain;" />
-                            <div class="card-body">
-                                <h6 class="card-title">@c.Name</h6>
-                                <p class="card-text small">
-                                    <strong>Pack:</strong> @c.Pack<br />
-                                    <strong>#:</strong> @c.CardNumber<br />
-                                    <span class="badge bg-secondary">@c.Rarity</span>
-                                </p>
-                                <div class="d-grid">
-                                    <button class="btn @(c.IsCollected ? "btn-outline-success" : "btn-success") btn-sm"
-                                            disabled="@c.IsCollected"
-                                            @onclick="() => Add(c.CardId)">
-                                        @(c.IsCollected ? "✓ Added" : "Add to Collection")
-                                    </button>
-                                </div>
-                            </div>
+            @foreach (var card in filteredCards)
+            {
+                <div class="col-md-4 mb-3">
+                    <div class="card">
+                        <img src="@card.ImageUrl" class="card-img-top" alt="@card.Name" />
+                        <div class="card-body">
+                            <h5 class="card-title">@card.Name</h5>
+                            <p class="card-text">Pack: @card.Pack</p>
+                            <p class="card-text">Rarity: @card.Rarity</p>
+                            <p class="card-text">Expansion: @card.Expansion</p>
                         </div>
                     </div>
-                }
-            </div>
+                </div>
+            }
         }
-    }
+    </div>
 </div>
 
 @code {
@@ -150,22 +112,23 @@
     private List<ViewCard> viewCards = new();
     private List<ViewCard> filteredCards = new();
 
-    // Filter and sort properties
     private string searchTerm = "";
     private string sortBy = "name";
     private string selectedPack = "";
     private string selectedRarity = "";
+    private string selectedExpansion = "";
     private string collectionFilter = "all";
 
-    // Available options for filters
     private List<string> availablePacks = new();
     private List<string> availableRarities = new();
+    private List<string> availableExpansions = new();
 
     private record ViewCard(
         string CardId,
         string Name,
         string Pack,
         string Rarity,
+        string Expansion,
         string CardNumber,
         string ImageUrl,
         bool IsCollected
@@ -173,16 +136,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var auth = await AuthState.GetAuthenticationStateAsync();
-        if (auth.User.Identity?.IsAuthenticated == true)
-        {
-            await Load();
-        }
-        else
-        {
-            // Still load cards even if not authenticated, just don't show collection status
-            await Load();
-        }
+        await Load();
     }
 
     private async Task Load()
@@ -192,10 +146,7 @@
 
         try
         {
-            // 1) load full set
             var all = await CollectionSvc.GetAllCardsAsync();
-
-            // 2) load just what the user owns
             var auth = await AuthState.GetAuthenticationStateAsync();
             var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var owned = uid is null
@@ -204,17 +155,13 @@
 
             var ownedIds = owned.Select(o => o.CardId).ToHashSet();
 
-            // 3) build view model
-            viewCards = all
-                .Select(c => new ViewCard(
-                    c.Id, c.Name, c.Pack, c.Rarity, c.CardNumber, c.ImageUrl,
-                    IsCollected: ownedIds.Contains(c.Id)
-                ))
-                .ToList();
+            viewCards = all.Select(c => new ViewCard(
+                c.Id, c.Name, c.Pack, c.Rarity, c.Expansion, c.CardNumber, c.ImageUrl,
+                ownedIds.Contains(c.Id))).ToList();
 
-            // Populate filter options
             availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
             availableRarities = viewCards.Select(c => c.Rarity).Distinct().OrderBy(r => r).ToList();
+            availableExpansions = viewCards.Select(c => c.Expansion).Distinct().OrderBy(e => e).ToList();
 
             ApplyFilters();
         }
@@ -225,25 +172,6 @@
         finally
         {
             isLoading = false;
-        }
-    }
-
-    private async Task Add(string cardId)
-    {
-        try
-        {
-            var auth = await AuthState.GetAuthenticationStateAsync();
-            var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)!.Value;
-
-            await CollectionSvc.AddCardAsync(uid,
-                new AddCardRequest { CardId = cardId, Quantity = 1 });
-
-            await Load();
-            await JS.InvokeVoidAsync("alert", "Card added to your collection!");
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("alert", $"Error adding card: {ex.Message}");
         }
     }
 
@@ -269,6 +197,11 @@
             filtered = filtered.Where(c => c.Rarity == selectedRarity);
         }
 
+        if (!string.IsNullOrEmpty(selectedExpansion))
+        {
+            filtered = filtered.Where(c => c.Expansion == selectedExpansion);
+        }
+
         if (collectionFilter == "collected")
         {
             filtered = filtered.Where(c => c.IsCollected);
@@ -278,22 +211,13 @@
             filtered = filtered.Where(c => !c.IsCollected);
         }
 
-        if (sortBy == "name")
+        filtered = sortBy switch
         {
-            filtered = filtered.OrderBy(c => c.Name);
-        }
-        else if (sortBy == "pack")
-        {
-            filtered = filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber);
-        }
-        else if (sortBy == "rarity")
-        {
-            filtered = filtered.OrderBy(c => GetRarityOrder(c.Rarity)).ThenBy(c => c.Name);
-        }
-        else // newest
-        {
-            filtered = filtered.OrderBy(c => c.CardNumber);
-        }
+            "name" => filtered.OrderBy(c => c.Name),
+            "pack" => filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber),
+            "rarity" => filtered.OrderBy(c => GetRarityOrder(c.Rarity)).ThenBy(c => c.Name),
+            _ => filtered.OrderBy(c => c.CardNumber)
+        };
 
         filteredCards = filtered.ToList();
         StateHasChanged();
@@ -310,6 +234,7 @@
         searchTerm = "";
         selectedPack = "";
         selectedRarity = "";
+        selectedExpansion = "";
         collectionFilter = "all";
         sortBy = "name";
         ApplyFilters();

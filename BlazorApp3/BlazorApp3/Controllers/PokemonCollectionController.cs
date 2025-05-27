@@ -88,6 +88,7 @@ namespace BlazorApp3.Controllers
                             Pack = apiCard.Pack,
                             Rarity = convertedRarity,
                             CardNumber = cardNumber,
+                            
                             ImageUrl = apiCard.Image,
                             Type = "",
                             CreatedAt = DateTime.UtcNow,
@@ -308,6 +309,8 @@ namespace BlazorApp3.Controllers
         public string Rarity { get; set; } = "";
         public string Pack { get; set; } = "";
         public string Health { get; set; } = "";
+
+        public string Expansion { get; set; } = "";
         public string Image { get; set; } = "";
         public string FullArt { get; set; } = "";
         public string Ex { get; set; } = "";
