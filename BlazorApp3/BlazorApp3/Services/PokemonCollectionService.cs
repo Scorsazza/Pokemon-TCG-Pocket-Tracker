@@ -23,7 +23,7 @@ namespace BlazorApp3.Services
             _httpFactory = httpFactory;
         }
 
-        private static readonly Dictionary<string, string> PackToExpansion = new()
+        private static readonly Dictionary<string, string> PackToExpansion = new() //Expansions are grouped by their packs
         {
             ["Charizard"] = "Genetic Apex",
             ["Mewtwo"] = "Genetic Apex",
