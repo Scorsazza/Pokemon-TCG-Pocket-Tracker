@@ -29,6 +29,31 @@ namespace BlazorApp3.Services
             ["Mewtwo"] = "Genetic Apex",
             ["Pikachu"] = "Genetic Apex",
             ["Shared(Genetic Apex)"] = "Genetic Apex",
+            ["Mythical Island"] = "Mythical Island",
+            ["Dialga"] = "Space-Time Smackdown",
+            ["Palkia"] = "Space-Time Smackdown",
+            ["Shared(Space-Time Smackdown)"] = "Space-Time Smackdown",
+            ["Triumphant Light"] = "Triumphant Light",
+            ["Shining Revelry"] = "Shining Revelry",
+            ["Solgaleo"] = "Celestial Guardians",
+            ["Lunala"] = "Celestial Guardians",
+            ["Shared(Celestial Guardians)"] = "Celestial Guardians",
+            ["Promo V1"] = "Promo Cards",
+            ["Promo V2"] = "Promo Cards",
+            ["Promo V3"] = "Promo Cards",
+            ["Promo V4"] = "Promo Cards",
+            ["Promo V5"] = "Promo Cards",
+            ["Promo V6"] = "Promo Cards",
+            ["Promo V7"] = "Promo Cards",
+            ["Promo V8"] = "Promo Cards",
+            ["Shop"] = "Shop Exclusive",
+            ["Shop Bundle"] = "Shop Exclusive",
+            ["Premium Missions"] = "Missions",
+            ["Missions"] = "Missions",
+            ["Campaign"] = "Miscellaneous",
+            ["Wonder Pick"] = "Miscellaneous"
+
+
         };
 
         private string GetExpansionFromPack(string pack)
