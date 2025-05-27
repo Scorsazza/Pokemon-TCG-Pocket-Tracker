@@ -75,6 +75,28 @@
         </div>
     </div>
 
+    <!-- Global Stats Bar -->
+    <div class="row mb-2">
+        <div class="col-md-4">
+            <div class="px-3 py-2 rounded" style="background: #181b2a; color: #4dc2ff; font-weight: 500;">
+                Collected: <span style="color: #fff">
+                    @myCollectedCards / @totalAvailableCards
+                    (@(totalAvailableCards == 0 ? 0 : (int)Math.Round(100.0 * myCollectedCards / totalAvailableCards))%)
+                </span>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="px-3 py-2 rounded" style="background: #ffe869; color: #181b2a; font-weight: 500;">
+                Unique Cards Owned: <span style="color: #181b2a">@myCollectedCards</span>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="px-3 py-2 rounded" style="background: #6cff8f; color: #181b2a; font-weight: 500;">
+                Total Cards Available: <span style="color: #181b2a">@totalAvailableCards</span>
+            </div>
+        </div>
+    </div>
+
     <!-- Cards Display -->
     <div class="row">
         @if (isLoading)
@@ -138,6 +160,10 @@
 
     private HashSet<string> selectedCards = new();
 
+    // Stats for global collection
+    private int totalAvailableCards = 0;
+    private int myCollectedCards = 0;
+
     private record ViewCard(string CardId, string Name, string Pack, string Rarity, string Expansion, string CardNumber, string ImageUrl, bool IsCollected);
 
     protected override async Task OnInitializedAsync() => await Load();
@@ -148,12 +174,27 @@
         error = null;
         try
         {
+            // Fetch all possible cards (global)
             var all = await CollectionSvc.GetAllCardsAsync();
+            totalAvailableCards = all.Select(c => c.Id).Distinct().Count();
+
             var auth = await AuthState.GetAuthenticationStateAsync();
             var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var owned = uid is null ? new List<CardCollectionDto>() : await CollectionSvc.GetMyCollectionAsync(uid);
             var ownedIds = owned.Select(o => o.CardId).ToHashSet();
-            viewCards = all.Select(c => new ViewCard(c.Id, c.Name, c.Pack, c.Rarity, c.Expansion, c.CardNumber, c.ImageUrl, ownedIds.Contains(c.Id))).ToList();
+            myCollectedCards = ownedIds.Count;
+
+            viewCards = all.Select(c => new ViewCard(
+                c.Id,
+                c.Name,
+                c.Pack,
+                c.Rarity,
+                c.Expansion,
+                c.CardNumber,
+                c.ImageUrl,
+                ownedIds.Contains(c.Id)
+            )).ToList();
+
             availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
             availableRarities = viewCards.Select(c => c.Rarity).Distinct().OrderBy(r => r).ToList();
             availableExpansions = viewCards.Select(c => c.Expansion).Distinct().OrderBy(e => e).ToList();

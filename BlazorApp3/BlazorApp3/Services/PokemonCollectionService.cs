@@ -58,8 +58,14 @@ namespace BlazorApp3.Services
                     "◊" => "Common",
                     "◊◊" => "Uncommon",
                     "◊◊◊" => "Rare",
-                    "◊◊◊◊" => "Ultra Rare",
-                    _ => "Unknown"
+                    "◊◊◊◊" => "EX Cards",
+                    "☆" => "Full Art",
+                    "☆☆" => "Enhanced Full Art",
+                    "☆☆☆" => "Immersive",
+                    "♕" => "Hyper Rare",
+                    "Promo" => "Promo",
+                    "Shop" => "Shop Exclusive",
+                    _ => "Other"
                 };
 
                 var number = a.Id.Split('-').ElementAtOrDefault(1) ?? "";
