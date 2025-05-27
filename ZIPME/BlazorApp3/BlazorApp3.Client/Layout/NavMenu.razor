@@ -1,0 +1,105 @@
+﻿@implements IDisposable
+@inject NavigationManager NavigationManager
+
+<nav style="background: rgba(30, 27, 75, 0.95); backdrop-filter: blur(10px); border-bottom: 2px solid rgba(139, 92, 246, 0.2); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); position: sticky; top: 0; z-index: 1000; min-height: 70px;">
+    <div>
+        <a href="" style="color: #ffffff; font-size: 1.75rem; font-weight: 700; text-decoration: none; text-shadow: 0 0 10px rgba(139, 92, 246, 0.5);">Pokemon Collection Tracker</a>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1; justify-content: center;">
+        <NavLink class="nav-link" href="" Match="NavLinkMatch.All"
+                 style="color: #e2e8f0; text-decoration: none; padding: 0.75rem 1rem; border-radius: 12px; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 1rem; border: none; background: transparent; white-space: nowrap;"
+                 onmouseover="this.style.background='rgba(139, 92, 246, 0.2)'; this.style.color='#a855f7'; this.style.transform='translateY(-1px)'"
+                 onmouseout="this.style.background='transparent'; this.style.color='#e2e8f0'; this.style.transform='translateY(0)'">
+            <span class="bi bi-house-door-fill" aria-hidden="true" style="font-size: 1.1rem;"></span> Home
+        </NavLink>
+
+        <NavLink class="nav-link" href="pokemon-collection"
+                 style="color: #e2e8f0; text-decoration: none; padding: 0.75rem 1rem; border-radius: 12px; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 1rem; border: none; background: transparent; white-space: nowrap;"
+                 onmouseover="this.style.background='rgba(139, 92, 246, 0.2)'; this.style.color='#a855f7'; this.style.transform='translateY(-1px)'"
+                 onmouseout="this.style.background='transparent'; this.style.color='#e2e8f0'; this.style.transform='translateY(0)'">
+            <span class="bi bi-collection" aria-hidden="true" style="font-size: 1.1rem;"></span> Collection
+        </NavLink>
+
+        <NavLink class="nav-link" href="bounty-board"
+                 style="color: #e2e8f0; text-decoration: none; padding: 0.75rem 1rem; border-radius: 12px; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 1rem; border: none; background: transparent; white-space: nowrap;"
+                 onmouseover="this.style.background='rgba(139, 92, 246, 0.2)'; this.style.color='#a855f7'; this.style.transform='translateY(-1px)'"
+                 onmouseout="this.style.background='transparent'; this.style.color='#e2e8f0'; this.style.transform='translateY(0)'">
+            <span class="bi bi-trophy" aria-hidden="true" style="font-size: 1.1rem;"></span> Bounty Board
+        </NavLink>
+
+        <NavLink class="nav-link" href="leaderboard"
+                 style="color: #e2e8f0; text-decoration: none; padding: 0.75rem 1rem; border-radius: 12px; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 1rem; border: none; background: transparent; white-space: nowrap;"
+                 onmouseover="this.style.background='rgba(139, 92, 246, 0.2)'; this.style.color='#a855f7'; this.style.transform='translateY(-1px)'"
+                 onmouseout="this.style.background='transparent'; this.style.color='#e2e8f0'; this.style.transform='translateY(0)'">
+            <span class="bi bi-award" aria-hidden="true" style="font-size: 1.1rem;"></span> Leaderboard
+        </NavLink>
+        <NavLink class="nav-link" href="AllCards"
+                 style="color: #e2e8f0; text-decoration: none; padding: 0.75rem 1rem; border-radius: 12px; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 1rem; border: none; background: transparent; white-space: nowrap;"
+                 onmouseover="this.style.background='rgba(139, 92, 246, 0.2)'; this.style.color='#a855f7'; this.style.transform='translateY(-1px)'"
+                 onmouseout="this.style.background='transparent'; this.style.color='#e2e8f0'; this.style.transform='translateY(0)'">
+            <span class="bi bi-award" aria-hidden="true" style="font-size: 1.1rem;"></span> All Cards
+        </NavLink>
+
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <AuthorizeView>
+            <Authorized>
+                <NavLink class="nav-link" href="Account/Manage"
+                         style="color: #e2e8f0; text-decoration: none; padding: 0.75rem 1rem; border-radius: 12px; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 0.95rem; border: none; background: transparent; white-space: nowrap;"
+                         onmouseover="this.style.background='rgba(139, 92, 246, 0.15)'; this.style.color='#8b5cf6'; this.style.transform='translateY(-1px)'"
+                         onmouseout="this.style.background='transparent'; this.style.color='#e2e8f0'; this.style.transform='translateY(0)'">
+                    <span class="bi bi-person-fill" aria-hidden="true" style="font-size: 1.1rem;"></span> @context.User.Identity?.Name
+                </NavLink>
+
+                <form action="Account/Logout" method="post" style="margin: 0; display: inline;">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                    <button type="submit"
+                            style="color: #ef4444; text-decoration: none; padding: 0.75rem 1rem; border-radius: 12px; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; font-weight: 500; font-size: 0.95rem; border: 1px solid rgba(239, 68, 68, 0.3); background: transparent; cursor: pointer; white-space: nowrap;"
+                            onmouseover="this.style.background='rgba(239, 68, 68, 0.1)'; this.style.borderColor='#ef4444'"
+                            onmouseout="this.style.background='transparent'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">
+                        <span class="bi bi-arrow-bar-left" aria-hidden="true" style="font-size: 1.1rem;"></span> Logout
+                    </button>
+                </form>
+            </Authorized>
+            <NotAuthorized>
+                <NavLink class="nav-link" href="Account/Register"
+                         style="color: #e2e8f0; text-decoration: none; padding: 0.75rem 1rem; border-radius: 12px; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 1rem; border: none; background: transparent; white-space: nowrap;"
+                         onmouseover="this.style.background='rgba(139, 92, 246, 0.2)'; this.style.color='#a855f7'; this.style.transform='translateY(-1px)'"
+                         onmouseout="this.style.background='transparent'; this.style.color='#e2e8f0'; this.style.transform='translateY(0)'">
+                    <span class="bi bi-person-plus" aria-hidden="true" style="font-size: 1.1rem;"></span> Register
+                </NavLink>
+
+                <NavLink class="nav-link" href="Account/Login"
+                         style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: #ffffff; text-decoration: none; font-weight: 700; border-radius: 15px; padding: 0.75rem 1.25rem; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; border: none; cursor: pointer; white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);"
+                         onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 25px rgba(139, 92, 246, 0.4)'; this.style.background='linear-gradient(135deg, #7c3aed, #6d28d9)'; this.style.color='#ffffff'"
+                         onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'; this.style.background='linear-gradient(135deg, #8b5cf6, #7c3aed)'; this.style.color='#ffffff'">
+                    <span class="bi bi-box-arrow-in-right" aria-hidden="true" style="font-size: 1.1rem;"></span> Login
+                </NavLink>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+</nav>
+
+@code {
+    private string? currentUrl;
+
+    protected override void OnInitialized()
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}

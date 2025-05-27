@@ -1,0 +1,251 @@
+﻿@page "/AllCards"
+@using BlazorApp3.Data.Models
+@using System.Security.Claims
+@using BlazorApp3.Services
+@inject IPokemonCollectionService CollectionSvc
+@inject AuthenticationStateProvider AuthState
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+@inherits ComponentBase
+
+<PageTitle>⚡ All Pokémon Cards</PageTitle>
+
+<div class="container mt-4">
+    <h1 class="mb-4">⚡ Browse All Cards</h1>
+
+    <!-- Controls Row -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <input type="text" class="form-control" placeholder="🔍 Search cards..."
+                   @bind="searchTerm" @oninput="OnSearchChanged" />
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" @bind="sortBy" @bind:after="ApplyFilters">
+                <option value="name">Sort by Name</option>
+                <option value="pack">Sort by Pack</option>
+                <option value="rarity">Sort by Rarity</option>
+                <option value="newest">Sort by Newest</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" @bind="selectedExpansion" @bind:after="ApplyFilters">
+                <option value="">All Expansions</option>
+                @foreach (var expansion in availableExpansions)
+                {
+                    <option value="@expansion">@expansion</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-outline-secondary w-100" @onclick="ClearFilters">
+                Clear Filters
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters Row -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <select class="form-select" @bind="selectedPack" @bind:after="ApplyFilters">
+                <option value="">All Packs</option>
+                @foreach (var pack in availablePacks)
+                {
+                    <option value="@pack">@pack</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-4">
+            <select class="form-select" @bind="selectedRarity" @bind:after="ApplyFilters">
+                <option value="">All Rarities</option>
+                @foreach (var rarity in availableRarities)
+                {
+                    <option value="@rarity">@rarity</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-4">
+            <select class="form-select" @bind="collectionFilter" @bind:after="ApplyFilters">
+                <option value="all">All Cards</option>
+                <option value="collected">Collected</option>
+                <option value="missing">Missing</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Cards Display -->
+    <div class="row">
+        @if (isLoading)
+        {
+            <div class="text-center">Loading cards...</div>
+        }
+        else if (!string.IsNullOrEmpty(error))
+        {
+            <div class="text-danger">@error</div>
+        }
+        else if (!filteredCards.Any())
+        {
+            <div class="text-muted">No cards match the current filters.</div>
+        }
+        else
+        {
+            @foreach (var card in filteredCards)
+            {
+                <div class="col-md-4 mb-3">
+                    <div class="card">
+                        <img src="@card.ImageUrl" class="card-img-top" alt="@card.Name" />
+                        <div class="card-body">
+                            <h5 class="card-title">@card.Name</h5>
+                            <p class="card-text">Pack: @card.Pack</p>
+                            <p class="card-text">Rarity: @card.Rarity</p>
+                            <p class="card-text">Expansion: @card.Expansion</p>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private bool isLoading = true;
+    private string? error;
+    private List<ViewCard> viewCards = new();
+    private List<ViewCard> filteredCards = new();
+
+    private string searchTerm = "";
+    private string sortBy = "name";
+    private string selectedPack = "";
+    private string selectedRarity = "";
+    private string selectedExpansion = "";
+    private string collectionFilter = "all";
+
+    private List<string> availablePacks = new();
+    private List<string> availableRarities = new();
+    private List<string> availableExpansions = new();
+
+    private record ViewCard(
+        string CardId,
+        string Name,
+        string Pack,
+        string Rarity,
+        string Expansion,
+        string CardNumber,
+        string ImageUrl,
+        bool IsCollected
+    );
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            var all = await CollectionSvc.GetAllCardsAsync();
+            var auth = await AuthState.GetAuthenticationStateAsync();
+            var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var owned = uid is null
+                        ? new List<CardCollectionDto>()
+                        : await CollectionSvc.GetMyCollectionAsync(uid);
+
+            var ownedIds = owned.Select(o => o.CardId).ToHashSet();
+
+            viewCards = all.Select(c => new ViewCard(
+                c.Id, c.Name, c.Pack, c.Rarity, c.Expansion, c.CardNumber, c.ImageUrl,
+                ownedIds.Contains(c.Id))).ToList();
+
+            availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
+            availableRarities = viewCards.Select(c => c.Rarity).Distinct().OrderBy(r => r).ToList();
+            availableExpansions = viewCards.Select(c => c.Expansion).Distinct().OrderBy(e => e).ToList();
+
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var filtered = viewCards.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            filtered = filtered.Where(c =>
+                c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                c.Pack.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                c.CardNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrEmpty(selectedPack))
+        {
+            filtered = filtered.Where(c => c.Pack == selectedPack);
+        }
+
+        if (!string.IsNullOrEmpty(selectedRarity))
+        {
+            filtered = filtered.Where(c => c.Rarity == selectedRarity);
+        }
+
+        if (!string.IsNullOrEmpty(selectedExpansion))
+        {
+            filtered = filtered.Where(c => c.Expansion == selectedExpansion);
+        }
+
+        if (collectionFilter == "collected")
+        {
+            filtered = filtered.Where(c => c.IsCollected);
+        }
+        else if (collectionFilter == "missing")
+        {
+            filtered = filtered.Where(c => !c.IsCollected);
+        }
+
+        filtered = sortBy switch
+        {
+            "name" => filtered.OrderBy(c => c.Name),
+            "pack" => filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber),
+            "rarity" => filtered.OrderBy(c => GetRarityOrder(c.Rarity)).ThenBy(c => c.Name),
+            _ => filtered.OrderBy(c => c.CardNumber)
+        };
+
+        filteredCards = filtered.ToList();
+        StateHasChanged();
+    }
+
+    private void OnSearchChanged(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+        ApplyFilters();
+    }
+
+    private void ClearFilters()
+    {
+        searchTerm = "";
+        selectedPack = "";
+        selectedRarity = "";
+        selectedExpansion = "";
+        collectionFilter = "all";
+        sortBy = "name";
+        ApplyFilters();
+    }
+
+    private int GetRarityOrder(string rarity) => rarity switch
+    {
+        "Common" => 1,
+        "Uncommon" => 2,
+        "Rare" => 3,
+        "Ultra Rare" => 4,
+        _ => 5
+    };
+}
