@@ -95,6 +95,35 @@ namespace BlazorApp3.Services
             await _context.SaveChangesAsync();
         }
 
+        public async Task SetQuantityAsync(string userId, string cardId, int quantity)
+        {
+            var uc = await _context.UserCards
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.CardId == cardId);
+
+            if (quantity <= 0)
+            {
+                if (uc != null)
+                    _context.UserCards.Remove(uc);
+            }
+            else
+            {
+                if (uc != null)
+                    uc.Quantity = quantity;
+                else
+                    _context.UserCards.Add(new D.UserCard
+                    {
+                        UserId = userId,
+                        CardId = cardId,
+                        Quantity = quantity,
+                        CollectedAt = DateTime.UtcNow
+                    });
+            }
+
+            await _context.SaveChangesAsync();
+            await _context.UpdateUserStatsAsync(userId);
+        }
+
+
         public async Task<List<D.PokemonCard>> GetAllCardsAsync()
         {
             return await _context.PokemonCards

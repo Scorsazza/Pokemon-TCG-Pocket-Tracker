@@ -93,11 +93,16 @@
                 <div class="col-md-4 mb-3">
                     <div class="card">
                         <img src="@card.ImageUrl" class="card-img-top" alt="@card.Name" />
-                        <div class="card-body">
+                        <div class="card-body d-flex flex-column">
                             <h5 class="card-title">@card.Name</h5>
-                            <p class="card-text">Pack: @card.Pack</p>
-                            <p class="card-text">Rarity: @card.Rarity</p>
-                            <p class="card-text">Expansion: @card.Expansion</p>
+                            <p class="card-text mb-1">Pack: @card.Pack</p>
+                            <p class="card-text mb-1">Rarity: @card.Rarity</p>
+                            <p class="card-text mb-3">Expansion: @card.Expansion</p>
+
+                            <button class="btn btn-sm w-100 mt-auto @(card.IsCollected ? "btn-secondary" : "btn-primary")"
+                                    @onclick="() => ToggleCard(card.CardId)">
+                                @(card.IsCollected ? "Remove from Collection" : "Add to Collection")
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -135,9 +140,7 @@
     );
 
     protected override async Task OnInitializedAsync()
-    {
-        await Load();
-    }
+        => await Load();
 
     private async Task Load()
     {
@@ -157,7 +160,8 @@
 
             viewCards = all.Select(c => new ViewCard(
                 c.Id, c.Name, c.Pack, c.Rarity, c.Expansion, c.CardNumber, c.ImageUrl,
-                ownedIds.Contains(c.Id))).ToList();
+                ownedIds.Contains(c.Id)
+            )).ToList();
 
             availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
             availableRarities = viewCards.Select(c => c.Rarity).Distinct().OrderBy(r => r).ToList();
@@ -180,36 +184,24 @@
         var filtered = viewCards.AsEnumerable();
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
-        {
             filtered = filtered.Where(c =>
                 c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 c.Pack.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 c.CardNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
-        }
 
         if (!string.IsNullOrEmpty(selectedPack))
-        {
             filtered = filtered.Where(c => c.Pack == selectedPack);
-        }
 
         if (!string.IsNullOrEmpty(selectedRarity))
-        {
             filtered = filtered.Where(c => c.Rarity == selectedRarity);
-        }
 
         if (!string.IsNullOrEmpty(selectedExpansion))
-        {
             filtered = filtered.Where(c => c.Expansion == selectedExpansion);
-        }
 
         if (collectionFilter == "collected")
-        {
             filtered = filtered.Where(c => c.IsCollected);
-        }
         else if (collectionFilter == "missing")
-        {
             filtered = filtered.Where(c => !c.IsCollected);
-        }
 
         filtered = sortBy switch
         {
@@ -220,7 +212,6 @@
         };
 
         filteredCards = filtered.ToList();
-        StateHasChanged();
     }
 
     private void OnSearchChanged(ChangeEventArgs e)
@@ -248,4 +239,26 @@
         "Ultra Rare" => 4,
         _ => 5
     };
+
+    private async Task ToggleCard(string cardId)
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (uid == null)
+        {
+            await JS.InvokeVoidAsync("alert", "Please log in to manage your collection.");
+            return;
+        }
+
+        var wasCollected = viewCards.First(c => c.CardId == cardId).IsCollected;
+
+        if (wasCollected)
+            await CollectionSvc.RemoveCardAsync(uid, cardId);
+        else
+            await CollectionSvc.AddCardAsync(uid, new AddCardRequest { CardId = cardId, Quantity = 1 });
+
+        // reload to refresh the IsCollected flags and reapply filters
+        await Load();
+    }
 }

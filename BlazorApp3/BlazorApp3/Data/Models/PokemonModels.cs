@@ -186,6 +186,7 @@ namespace BlazorApp3.Data.Models
         public string Rarity { get; set; } = "";
         public string CardNumber { get; set; } = "";
         public string ImageUrl { get; set; } = "";
+        public string Expansion { get; set; } = "";
         public string Type { get; set; } = "";
         public int Quantity { get; set; } = 0;
         public bool IsCollected { get; set; } = false;

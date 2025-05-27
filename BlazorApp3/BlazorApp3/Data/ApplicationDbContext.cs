@@ -235,6 +235,7 @@ namespace BlazorApp3.Data
                             Name = card.Name,
                             Pack = card.Pack,
                             Rarity = card.Rarity,
+                            Expansion = card.Expansion,
                             CardNumber = card.CardNumber,
                             ImageUrl = card.ImageUrl,
                             Type = card.Type,
