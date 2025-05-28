@@ -46,12 +46,12 @@ namespace BlazorApp3.Services
             ["Promo V6"] = "Promo Cards",
             ["Promo V7"] = "Promo Cards",
             ["Promo V8"] = "Promo Cards",
-            ["Shop"] = "Shop Exclusive",
-            ["Shop Bundle"] = "Shop Exclusive",
-            ["Premium Missions"] = "Missions",
-            ["Missions"] = "Missions",
-            ["Campaign"] = "Miscellaneous",
-            ["Wonder Pick"] = "Miscellaneous"
+            ["Shop"] = "Promo Cards",
+            ["Shop Bundle"] = "Promo Cards",
+            ["Premium Missions"] = "Promo Cards",
+            ["Missions"] = "Promo Cards",
+            ["Campaign"] = "Promo Cards",
+            ["Wonder Pick"] = "Promo Cards"
 
 
         };
