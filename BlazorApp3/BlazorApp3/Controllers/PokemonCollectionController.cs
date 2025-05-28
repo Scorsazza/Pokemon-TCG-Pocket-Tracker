@@ -125,7 +125,7 @@ namespace BlazorApp3.Controllers
                 "◊" => "Common",
                 "◊◊" => "Uncommon",
                 "◊◊◊" => "Rare",
-                "◊◊◊◊" => "Ultra Rare",
+                "◊◊◊◊" => "EX Cards",
                 _ => "Unknown",
             };
         }
