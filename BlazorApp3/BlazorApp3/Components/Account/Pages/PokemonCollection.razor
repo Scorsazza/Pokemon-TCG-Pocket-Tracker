@@ -31,6 +31,7 @@
                         <option value="name">Sort by Name</option>
                         <option value="pack">Sort by Pack</option>
                         <option value="rarity">Sort by Rarity</option>
+                        <option value="number">Sort by Card Number</option>
                         <option value="quantity">Sort by Quantity</option>
                         <option value="newest">Sort by Newest</option>
                     </select>
@@ -120,9 +121,10 @@
                                 <img src="@card.ImageUrl" class="card-img-top" alt="@card.Name" />
                                 <div class="card-body d-flex flex-column">
                                     <h5 class="card-title">@card.Name</h5>
+                                    <p class="card-text mb-1">Card Number: @card.CardNumber</p>
                                     <p class="card-text mb-1">Pack: @card.Pack</p>
-                                    <p class="card-text mb-1">Rarity: @card.Rarity</p>
                                     <p class="card-text mb-1">Expansion: @card.Expansion</p>
+                                    <p class="card-text mb-3">Rarity: @card.Rarity</p>
 
                                     <div class="input-group input-group-sm mb-2">
                                         <button class="btn btn-outline-secondary"
@@ -135,6 +137,7 @@
                                                class="form-control text-center"
                                                value="@card.Quantity"
                                                min="0"
+                                               max="100"
                                                @onchange="(e) => QuantityChanged(card, e)" />
 
                                         <button class="btn btn-outline-secondary"
@@ -180,9 +183,8 @@
     private List<string> availableRarities = new();
     private List<string> availableExpansions = new();
 
-    // Global collection stats
-    private int totalAvailableCards = 0;    // All unique cards in the game
-    private int myCollectedCards = 0;       // Unique cards you own
+    private int totalAvailableCards = 0;
+    private int myCollectedCards = 0;
 
     public record ViewCard(
         string CardId,
@@ -216,29 +218,32 @@
             var auth = await AuthState.GetAuthenticationStateAsync();
             var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)!.Value;
 
-            // Fetch all possible cards (global)
             var allCards = await CollectionSvc.GetAllCardsAsync();
             totalAvailableCards = allCards.Select(c => c.Id).Distinct().Count();
 
-            // Fetch your collection
             var owned = await CollectionSvc.GetMyCollectionAsync(uid, isCollected: true);
             viewCards = owned.Select(o => new ViewCard(
-                o.CardId,
-                o.Name,
-                o.Pack,
-                o.Rarity,
-                o.Expansion,
-                o.CardNumber,
-                o.ImageUrl,
-                true,
-                o.Quantity,
-                o.IsForTrade
+                o.CardId, o.Name, o.Pack, o.Rarity, o.Expansion, o.CardNumber,
+                o.ImageUrl, true, o.Quantity, o.IsForTrade
             )).ToList();
 
             myCollectedCards = viewCards.Select(c => c.CardId).Distinct().Count();
 
             availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
-            availableRarities = viewCards.Select(c => c.Rarity).Distinct().OrderBy(r => r).ToList();
+
+            var rarityOrder = new[]
+            {
+                "Common", "Uncommon", "Rare", "EX Cards", "Full Art",
+                "Enhanced Full Art", "Immersive", "Hyper Rare", "Promo"
+            };
+
+            availableRarities = viewCards
+                .Select(c => c.Rarity)
+                .Distinct()
+                .OrderBy(r => Array.IndexOf(rarityOrder, r) == -1 ? int.MaxValue : Array.IndexOf(rarityOrder, r))
+                .ThenBy(r => r)
+                .ToList();
+
             availableExpansions = viewCards.Select(c => c.Expansion).Distinct().OrderBy(e => e).ToList();
 
             ApplyFilters();
@@ -260,7 +265,6 @@
         if (!string.IsNullOrWhiteSpace(searchTerm))
             filtered = filtered.Where(c =>
                 c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                c.Pack.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 c.CardNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
 
         if (!string.IsNullOrEmpty(selectedPack))
@@ -283,6 +287,7 @@
             "pack" => filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber),
             "rarity" => filtered.OrderBy(c => c.Rarity).ThenBy(c => c.Name),
             "quantity" => filtered.OrderByDescending(c => c.Quantity).ThenBy(c => c.Name),
+            "number" => filtered.OrderBy(c => int.TryParse(c.CardNumber, out var num) ? num : int.MaxValue),
             _ => filtered.OrderBy(c => c.CardNumber)
         };
 
@@ -327,7 +332,7 @@
         var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (uid == null) return;
 
-        var newQty = Math.Max(0, card.Quantity + delta);
+        var newQty = Math.Clamp(card.Quantity + delta, 0, 100);
         await CollectionSvc.SetQuantityAsync(uid, card.CardId, newQty);
         await Load();
     }
@@ -340,7 +345,7 @@
 
         if (int.TryParse(e.Value?.ToString(), out var newQty))
         {
-            newQty = Math.Max(0, newQty);
+            newQty = Math.Clamp(newQty, 0, 100);
             await CollectionSvc.SetQuantityAsync(uid, card.CardId, newQty);
             await Load();
         }

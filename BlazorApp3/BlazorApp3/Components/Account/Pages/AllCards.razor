@@ -26,6 +26,7 @@
                 <option value="rarity">Sort by Rarity</option>
                 <option value="expansion">Sort by Expansion</option>
                 <option value="newest">Sort by Newest</option>
+                <option value="number">Sort by Card Number</option> 
             </select>
         </div>
         <div class="col-md-3">
@@ -132,9 +133,11 @@
                         <img src="@card.ImageUrl" class="card-img-top" alt="@card.Name" />
                         <div class="card-body d-flex flex-column">
                             <h5 class="card-title">@card.Name</h5>
+                            <p class="card-text mb-1">Card Number: @card.CardNumber</p>
                             <p class="card-text mb-1">Pack: @card.Pack</p>
-                            <p class="card-text mb-1">Rarity: @card.Rarity</p>
-                            <p class="card-text mb-3">Expansion: @card.Expansion</p>
+                            <p class="card-text mb-1">Expansion: @card.Expansion</p>
+                            <p class="card-text mb-3">Rarity: @card.Rarity</p>
+                           
 
                             <button class="btn btn-sm w-100 mt-auto @(card.IsCollected ? "btn-secondary" : "btn-primary")"
                                     @onclick="() => ToggleCard(card.CardId)">
@@ -167,7 +170,6 @@
 
     private HashSet<string> selectedCards = new();
 
-    // Stats for global collection
     private int totalAvailableCards = 0;
     private int myCollectedCards = 0;
 
@@ -176,74 +178,106 @@
     protected override async Task OnInitializedAsync() => await Load();
 
     private async Task Load()
+{
+    isLoading = true;
+    error = null;
+    try
     {
-        isLoading = true;
-        error = null;
-        try
-        {
-            // Fetch all possible cards (global)
-            var all = await CollectionSvc.GetAllCardsAsync();
-            totalAvailableCards = all.Select(c => c.Id).Distinct().Count();
+        var all = await CollectionSvc.GetAllCardsAsync();
+        totalAvailableCards = all.Select(c => c.Id).Distinct().Count();
 
-            var auth = await AuthState.GetAuthenticationStateAsync();
-            var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var owned = uid is null ? new List<CardCollectionDto>() : await CollectionSvc.GetMyCollectionAsync(uid);
-            var ownedIds = owned.Select(o => o.CardId).ToHashSet();
-            myCollectedCards = ownedIds.Count;
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var owned = uid is null ? new List<CardCollectionDto>() : await CollectionSvc.GetMyCollectionAsync(uid);
+        var ownedIds = owned.Select(o => o.CardId).ToHashSet();
+        myCollectedCards = ownedIds.Count;
 
-            viewCards = all.Select(c => new ViewCard(
-                c.Id,
-                c.Name,
-                c.Pack,
-                c.Rarity,
-                c.Expansion,
-                c.CardNumber,
-                c.ImageUrl,
-                ownedIds.Contains(c.Id)
-            )).ToList();
+        viewCards = all.Select(c => new ViewCard(
+            c.Id,
+            c.Name,
+            c.Pack,
+            c.Rarity,
+            c.Expansion,
+            c.CardNumber,
+            c.ImageUrl,
+            ownedIds.Contains(c.Id)
+        )).ToList();
 
-            availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
-            availableRarities = viewCards.Select(c => c.Rarity).Distinct().OrderBy(r => r).ToList();
-            availableExpansions = viewCards.Select(c => c.Expansion).Distinct().OrderBy(e => e).ToList();
-            ApplyFilters();
-        }
-        catch (Exception ex) { error = ex.Message; }
-        finally { isLoading = false; }
+       
+        availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
+        availableExpansions = viewCards.Select(c => c.Expansion).Distinct().OrderBy(e => e).ToList();
+
+        // Rarity order because i said so.
+        var rarityOrder = new[] {
+            "Common", "Uncommon", "Rare", "EX Cards", "Full Art", "Enhanced Full Art", "Immersive", "Hyper Rare", "Promo"
+        };
+
+        availableRarities = viewCards.Select(c => c.Rarity)
+            .Distinct()
+            .OrderBy(r => Array.IndexOf(rarityOrder, r) == -1 ? int.MaxValue : Array.IndexOf(rarityOrder, r))
+            .ThenBy(r => r) // fallback to alphabetical if rarity is borked.
+            .ToList();
+
+        ApplyFilters();
     }
+    catch (Exception ex) { error = ex.Message; }
+    finally { isLoading = false; }
+}
 
     private void ApplyFilters()
     {
         var filtered = viewCards.AsEnumerable();
+
         if (!string.IsNullOrWhiteSpace(searchTerm))
-            filtered = filtered.Where(c => c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) || c.Pack.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) || c.CardNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+            filtered = filtered.Where(c => c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                                        || c.CardNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
         if (!string.IsNullOrEmpty(selectedPack)) filtered = filtered.Where(c => c.Pack == selectedPack);
         if (!string.IsNullOrEmpty(selectedRarity)) filtered = filtered.Where(c => c.Rarity == selectedRarity);
         if (!string.IsNullOrEmpty(selectedExpansion)) filtered = filtered.Where(c => c.Expansion == selectedExpansion);
         if (collectionFilter == "collected") filtered = filtered.Where(c => c.IsCollected);
         else if (collectionFilter == "missing") filtered = filtered.Where(c => !c.IsCollected);
-        filtered = sortBy switch { 
-            "name" => filtered.OrderBy(c => c.Name), 
-            "pack" => filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber), 
-            "rarity" => filtered.OrderBy(c => c.Rarity).ThenBy(c => c.Name), 
+
+        filtered = sortBy switch
+        {
+            "name" => filtered.OrderBy(c => c.Name),
+            "pack" => filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber),
+            "rarity" => filtered.OrderBy(c => c.Rarity).ThenBy(c => c.Name),
             "expansion" => filtered.OrderBy(c => c.Expansion).ThenBy(c => c.Pack).ThenBy(c => c.CardNumber),
-            _ => filtered.OrderBy(c => c.CardNumber) 
+            "number" => filtered.OrderBy(c => int.TryParse(c.CardNumber, out var num) ? num : int.MaxValue), 
+            _ => filtered.OrderBy(c => c.CardNumber)
         };
+
         filteredCards = filtered.ToList();
     }
 
-    private void OnSearchChanged(ChangeEventArgs e) { searchTerm = e.Value?.ToString() ?? ""; ApplyFilters(); }
-    private void ClearFilters() { searchTerm = ""; selectedPack = selectedRarity = selectedExpansion = string.Empty; collectionFilter = "all"; sortBy = "name"; selectedCards.Clear(); ApplyFilters(); }
-
-    private bool IsFiltered()
+    private void OnSearchChanged(ChangeEventArgs e)
     {
-        return !string.IsNullOrWhiteSpace(searchTerm) ||
-               !string.IsNullOrEmpty(selectedPack) ||
-               !string.IsNullOrEmpty(selectedRarity) ||
-               !string.IsNullOrEmpty(selectedExpansion) ||
-               collectionFilter != "all";
+        searchTerm = e.Value?.ToString() ?? "";
+        ApplyFilters();
     }
 
-    private void ToggleSelection(string cardId, bool? isChecked) { if (isChecked == true) selectedCards.Add(cardId); else selectedCards.Remove(cardId); }
+    private void ClearFilters()
+    {
+        searchTerm = "";
+        selectedPack = selectedRarity = selectedExpansion = string.Empty;
+        collectionFilter = "all";
+        sortBy = "name";
+        selectedCards.Clear();
+        ApplyFilters();
+    }
+
+    private bool IsFiltered() =>
+        !string.IsNullOrWhiteSpace(searchTerm)
+        || !string.IsNullOrEmpty(selectedPack)
+        || !string.IsNullOrEmpty(selectedRarity)
+        || !string.IsNullOrEmpty(selectedExpansion)
+        || collectionFilter != "all";
+
+    private void ToggleSelection(string cardId, bool? isChecked)
+    {
+        if (isChecked == true) selectedCards.Add(cardId);
+        else selectedCards.Remove(cardId);
+    }
 
     private int GetEligibleFilteredCount()
     {
@@ -255,20 +289,31 @@
     {
         var auth = await AuthState.GetAuthenticationStateAsync();
         var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (uid == null) { await JS.InvokeVoidAsync("alert", "Please log in to add cards."); return; }
-        foreach (var cardId in selectedCards) await CollectionSvc.AddCardAsync(uid, new AddCardRequest { CardId = cardId, Quantity = 1 });
-        selectedCards.Clear(); await Load();
+        if (uid == null)
+        {
+            await JS.InvokeVoidAsync("alert", "Please log in to add cards.");
+            return;
+        }
+        foreach (var cardId in selectedCards)
+            await CollectionSvc.AddCardAsync(uid, new AddCardRequest { CardId = cardId, Quantity = 1 });
+
+        selectedCards.Clear();
+        await Load();
     }
 
     private async Task AddAllFilteredToCollection()
     {
         var auth = await AuthState.GetAuthenticationStateAsync();
         var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (uid == null) { await JS.InvokeVoidAsync("alert", "Please log in to add cards."); return; }
-        
+        if (uid == null)
+        {
+            await JS.InvokeVoidAsync("alert", "Please log in to add cards.");
+            return;
+        }
+
         var allowedRarities = new HashSet<string> { "Common", "Uncommon", "Rare", "EX Cards" };
         var cardsToAdd = filteredCards.Where(c => !c.IsCollected && allowedRarities.Contains(c.Rarity)).ToList();
-        
+
         if (!cardsToAdd.Any())
         {
             await JS.InvokeVoidAsync("alert", "No eligible cards to add (only Common, Uncommon, Rare, and EX Cards can be added).");
@@ -278,19 +323,38 @@
         foreach (var card in cardsToAdd)
         {
             await CollectionSvc.AddCardAsync(uid, new AddCardRequest { CardId = card.CardId, Quantity = 1 });
+
+            // Update local viewCards + filteredCards
+            var original = viewCards.FirstOrDefault(c => c.CardId == card.CardId);
+            if (original is not null)
+                viewCards[viewCards.IndexOf(original)] = original with { IsCollected = true };
         }
-        
+
+        // Clear selected cards
         selectedCards.Clear();
-        await Load();
+
+        // Recalculate stats
+        myCollectedCards = viewCards.Count(c => c.IsCollected);
+
+        // Refresh filtered view only
+        ApplyFilters();
     }
+
 
     private async Task ToggleCard(string cardId)
     {
         var auth = await AuthState.GetAuthenticationStateAsync();
         var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (uid == null) { await JS.InvokeVoidAsync("alert", "Please log in."); return; }
+        if (uid == null)
+        {
+            await JS.InvokeVoidAsync("alert", "Please log in.");
+            return;
+        }
+
         var was = viewCards.First(c => c.CardId == cardId).IsCollected;
-        if (was) await CollectionSvc.RemoveCardAsync(uid, cardId); else await CollectionSvc.AddCardAsync(uid, new AddCardRequest { CardId = cardId, Quantity = 1 });
+        if (was) await CollectionSvc.RemoveCardAsync(uid, cardId);
+        else await CollectionSvc.AddCardAsync(uid, new AddCardRequest { CardId = cardId, Quantity = 1 });
+
         await Load();
     }
 }

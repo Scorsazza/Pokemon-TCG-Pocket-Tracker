@@ -126,7 +126,13 @@ namespace BlazorApp3.Controllers
                 "◊◊" => "Uncommon",
                 "◊◊◊" => "Rare",
                 "◊◊◊◊" => "EX Cards",
-                _ => "Unknown",
+                "☆" => "Full Art",
+                "☆☆" => "Enhanced Full Art",
+                "☆☆☆" => "Immersive",
+                "♕" => "Hyper Rare",
+                "Promo" => "Promo",
+                "Shop" => "Shop Exclusive",
+                _ => "Other"
             };
         }
 
@@ -139,7 +145,7 @@ namespace BlazorApp3.Controllers
         }
 
         // GET: api/PokemonCollection/my-collection
-        // Now allows anonymous users and returns an empty list if not signed in
+        // Now allows anonymous users and returns an empty list if not signed in because auth is annoying and hates me
         [HttpGet("my-collection")]
         [AllowAnonymous]
         public async Task<ActionResult<List<CardCollectionDto>>> GetMyCollection(
