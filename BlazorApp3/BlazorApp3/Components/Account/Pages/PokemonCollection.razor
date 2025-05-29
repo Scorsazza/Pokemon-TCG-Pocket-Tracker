@@ -7,6 +7,7 @@
 @inject IJSRuntime JS
 @rendermode InteractiveServer
 @inherits ComponentBase
+@implements IDisposable
 
 <PageTitle>Pokémon TCG Pocket Collection Tracker</PageTitle>
 
@@ -128,20 +129,24 @@
 
                                     <div class="input-group input-group-sm mb-2">
                                         <button class="btn btn-outline-secondary"
-                                                @onclick="() => AdjustQuantity(card, -1)"
+                                                @onmousedown="() => StartAdjusting(card, -1)"
+                                                @onmouseup="StopAdjusting"
+                                                @onmouseleave="StopAdjusting"
+                                                @ontouchstart="() => StartAdjusting(card, -1)"
+                                                @ontouchend="StopAdjusting"
                                                 disabled="@(card.Quantity <= 0)">
                                             −
                                         </button>
 
-                                        <input type="number"
-                                               class="form-control text-center"
-                                               value="@card.Quantity"
-                                               min="0"
-                                               max="100"
-                                               @onchange="(e) => QuantityChanged(card, e)" />
+                                        <span class="form-control text-center bg-light">@card.Quantity</span>
 
                                         <button class="btn btn-outline-secondary"
-                                                @onclick="() => AdjustQuantity(card, +1)">
+                                                @onmousedown="() => StartAdjusting(card, +1)"
+                                                @onmouseup="StopAdjusting"
+                                                @onmouseleave="StopAdjusting"
+                                                @ontouchstart="() => StartAdjusting(card, +1)"
+                                                @ontouchend="StopAdjusting"
+                                                disabled="@(card.Quantity >= 100)">
                                             +
                                         </button>
                                     </div>
@@ -266,6 +271,7 @@
             filtered = filtered.Where(c =>
                 c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 c.CardNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+                
 
         if (!string.IsNullOrEmpty(selectedPack))
             filtered = filtered.Where(c => c.Pack == selectedPack);
@@ -334,20 +340,64 @@
 
         var newQty = Math.Clamp(card.Quantity + delta, 0, 100);
         await CollectionSvc.SetQuantityAsync(uid, card.CardId, newQty);
-        await Load();
+        
+        // Update local state immediately for better responsiveness
+        var cardIndex = viewCards.FindIndex(c => c.CardId == card.CardId);
+        if (cardIndex >= 0)
+        {
+            viewCards[cardIndex] = card with { Quantity = newQty };
+            ApplyFilters();
+            StateHasChanged();
+        }
     }
 
-    private async Task QuantityChanged(ViewCard card, ChangeEventArgs e)
-    {
-        var auth = await AuthState.GetAuthenticationStateAsync();
-        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (uid == null) return;
+    private Timer? adjustTimer;
+    private ViewCard? currentCard;
+    private int currentDelta;
+    private bool isAdjusting = false;
 
-        if (int.TryParse(e.Value?.ToString(), out var newQty))
+    private async Task StartAdjusting(ViewCard card, int delta)
+    {
+        // Immediate first adjustment
+        await AdjustQuantity(card, delta);
+        
+        currentCard = card;
+        currentDelta = delta;
+        isAdjusting = true;
+
+        // Start timer for continuous adjustment after initial delay
+        adjustTimer = new Timer(OnTimerTick, null, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(100));
+    }
+
+    private void OnTimerTick(object? state)
+    {
+        if (isAdjusting && currentCard != null)
         {
-            newQty = Math.Clamp(newQty, 0, 100);
-            await CollectionSvc.SetQuantityAsync(uid, card.CardId, newQty);
-            await Load();
+            InvokeAsync(async () =>
+            {
+                // Check bounds before adjusting
+                if ((currentDelta > 0 && currentCard.Quantity >= 100) || 
+                    (currentDelta < 0 && currentCard.Quantity <= 0))
+                {
+                    StopAdjusting();
+                    return;
+                }
+                
+                await AdjustQuantity(currentCard, currentDelta);
+            });
         }
+    }
+
+    private void StopAdjusting()
+    {
+        isAdjusting = false;
+        adjustTimer?.Dispose();
+        adjustTimer = null;
+        currentCard = null;
+    }
+
+    public void Dispose()
+    {
+        adjustTimer?.Dispose();
     }
 }

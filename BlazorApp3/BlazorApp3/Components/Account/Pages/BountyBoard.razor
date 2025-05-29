@@ -1,13 +1,273 @@
-﻿@page "/bounty-board"
+﻿@page "/bountyboard"
+@using System.Collections.Generic
+@using System.Linq
+@using System.Threading.Tasks
+@using System.Security.Claims
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
+@using BlazorApp3.Data.Models
+@using BlazorApp3.Data
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthState
+@inject IJSRuntime JS
+@rendermode InteractiveServer
 
-<div style="display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center; flex-direction: column;">
-    <h1 style="color: #ffffff; text-shadow: 0 0 10px rgba(139, 92, 246, 0.5); font-size: 2.25rem; margin-bottom: 0.5rem;">
-        COMING SOON
-    </h1>
-    <h1 style="color: #ffffff; text-shadow: 0 0 10px rgba(139, 92, 246, 0.5); font-size: 1.5rem; margin-bottom: 0.5rem;">
-        Bounty Board is WIP and will be released soon.
-    </h1>
+<PageTitle>Bounty Board</PageTitle>
+
+<div class="container py-4">
+    <h1 class="mb-4">Bounty Board</h1>
+
+    @if (isLoading)
+    {
+        <div class="text-center">
+            <div class="spinner-border text-secondary" role="status"></div>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <div class="col-md-4">
+                <section class="create-bounty mb-4 p-3 border rounded bg-light">
+                    <h5>Create New Bounty</h5>
+
+                    <input placeholder="Friend Code" class="form-control mb-2" @bind="friendCode" />
+                    <input placeholder="Search cards..." class="form-control mb-2" @bind="searchTerm" @oninput="FilterCards" />
+
+                    @if (filteredCards.Any())
+                    {
+                        <div class="d-flex overflow-auto mb-2">
+                            @foreach (var card in filteredCards)
+                            {
+                                <div class="me-2 card-item @(selectedCardId == card.Id ? "border-primary" : "border") rounded p-1" @onclick="() => SelectCard(card.Id)" style="cursor:pointer; min-width:80px;">
+                                    <img src="@card.ImageUrl" alt="@card.Name" class="img-fluid" style="height:120px; object-fit:contain;" />
+                                    <small class="d-block text-center mt-1">@card.Name</small>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <textarea class="form-control mb-2" placeholder="Description" @bind="description" rows="2"></textarea>
+                    <button class="btn btn-primary w-100" @onclick="OnSubmit" disabled="@(string.IsNullOrEmpty(selectedCardId) || string.IsNullOrEmpty(description) || string.IsNullOrEmpty(friendCode))">
+                        Submit Bounty
+                    </button>
+                </section>
+            </div>
+
+            <div class="col-md-8">
+                <section class="bounty-list">
+                    <h5>Active Bounties</h5>
+                    @if (!bounties.Any())
+                    {
+                        <div class="alert alert-info">No bounties posted yet.</div>
+                    }
+                    else
+                    {
+                        <ul class="list-group">
+                            @foreach (var b in bounties)
+                            {
+                                <li class="list-group-item mb-3">
+                                    <div class="d-flex align-items-start">
+                                        <img src="@b.CardImageUrl" alt="@b.CardName" class="me-3" style="width:100px; height:150px; object-fit:cover;" />
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-1">@b.CardName <small class="text-muted">(@b.CardId)</small></h6>
+                                            <p class="mb-1">@b.Description</p>
+                                            <p class="mb-1"><strong>Friend Code:</strong> @b.OfferedItem</p>
+                                            <p class="mb-1"><small class="text-muted">Expansion: @b.Expansion | Rarity: @b.Rarity</small></p>
+                                            <p class="mb-1"><small class="text-muted">Posted by <strong>@b.UserName</strong> on @b.CreatedAt.ToLocalTime().ToString("g")</small></p>
+                                            @if (offerForBountyId == b.Id)
+                                            {
+                                                <div class="mt-2">
+                                                    <select class="form-select form-select-sm mb-2" @bind="selectedOfferCardId">
+                                                        <option value="">-- Select your card --</option>
+                                                        @foreach (var uc in userCards)
+                                                        {
+                                                            <option value="@uc.CardId">@uc.Card.Name (@uc.Quantity)</option>
+                                                        }
+                                                    </select>
+                                                    <button class="btn btn-success btn-sm me-2" @onclick="SubmitOffer">Send Offer</button>
+                                                    <button class="btn btn-secondary btn-sm" @onclick="CancelOffer">Cancel</button>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <button class="btn btn-outline-success btn-sm mt-2" @onclick="() => StartOffer(b.Id)">Offer Card</button>
+                                            }
+                                        </div>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+            </div>
+        </div>
+    }
 </div>
 
 @code {
+    bool isLoading = true;
+    string searchTerm = string.Empty;
+    string selectedCardId = string.Empty;
+    string description = string.Empty;
+    string friendCode = string.Empty;
+
+    List<PokemonCard> allCards = new();
+    List<PokemonCard> filteredCards = new();
+    List<BountyRequestDtoExtended> bounties = new();
+
+    List<UserCard> userCards = new();
+    int? offerForBountyId = null;
+    string selectedOfferCardId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        isLoading = false;
+    }
+
+    async Task LoadData()
+    {
+        allCards = await Db.PokemonCards.ToListAsync();
+        filteredCards.Clear();
+
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrEmpty(uid))
+        {
+            userCards = await Db.UserCards
+                .Include(uc => uc.Card)
+                .Where(uc => uc.UserId == uid && uc.Quantity > 0)
+                .ToListAsync();
+        }
+
+        bounties = await Db.BountyRequests
+            .Include(br => br.Card)
+            .Include(br => br.User)
+            .OrderByDescending(br => br.CreatedAt)
+            .Select(br => new BountyRequestDtoExtended
+            {
+                Id = br.Id,
+                UserName = br.User.UserName ?? "Unknown",
+                CardId = br.CardId,
+                CardName = br.Card.Name,
+                CardImageUrl = br.Card.ImageUrl,
+                Expansion = br.Card.Expansion,
+                Rarity = br.Card.Rarity,
+                Description = br.Description,
+                OfferedItem = br.OfferedItem,
+                Status = br.Status,
+                CreatedAt = br.CreatedAt
+            })
+            .ToListAsync();
+    }
+
+    void FilterCards(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        filteredCards = string.IsNullOrWhiteSpace(searchTerm)
+            ? new List<PokemonCard>()
+            : allCards.Where(c => c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    void SelectCard(string id) => selectedCardId = id;
+
+    async Task OnSubmit()
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        var user = auth.User;
+        if (!user.Identity.IsAuthenticated)
+        {
+            await JS.InvokeVoidAsync("alert", "Please log in to post a bounty.");
+            return;
+        }
+
+        var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var bounty = new BountyRequest
+        {
+            UserId = userId!,
+            CardId = selectedCardId,
+            Description = description,
+            OfferedItem = friendCode,
+            Status = BountyStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        Db.BountyRequests.Add(bounty);
+        await Db.SaveChangesAsync();
+        await Db.UpdateUserStatsAsync(userId!);
+
+        // Reset
+        selectedCardId = description = friendCode = string.Empty;
+        filteredCards.Clear();
+        isLoading = true;
+        await LoadData();
+        isLoading = false;
+    }
+
+    void StartOffer(int bountyId)
+    {
+        offerForBountyId = bountyId;
+        selectedOfferCardId = string.Empty;
+    }
+
+    async Task SubmitOffer()
+    {
+        if (offerForBountyId == null || string.IsNullOrEmpty(selectedOfferCardId))
+            return;
+
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (uid == null)
+        {
+            await JS.InvokeVoidAsync("alert", "Please log in to offer.");
+            return;
+        }
+
+        var offer = new BountyOffer
+        {
+            BountyRequestId = offerForBountyId.Value,
+            OffererId = uid,
+            CardId = selectedOfferCardId,
+            CreatedAt = DateTime.UtcNow,
+            Status = OfferStatus.Pending
+        };
+
+        Db.BountyOffers.Add(offer);
+        await Db.SaveChangesAsync();
+
+        // Clear offer UI
+        offerForBountyId = null;
+        selectedOfferCardId = string.Empty;
+    }
+
+    void CancelOffer()
+    {
+        offerForBountyId = null;
+        selectedOfferCardId = string.Empty;
+    }
+
+    private class BountyRequestDtoExtended
+    {
+        public int Id { get; set; }
+        public string UserName { get; set; } = "";
+        public string CardId { get; set; } = "";
+        public string CardName { get; set; } = "";
+        public string CardImageUrl { get; set; } = "";
+        public string Expansion { get; set; } = "";
+        public string Rarity { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string OfferedItem { get; set; } = "";
+        public BountyStatus Status { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
 }
+
+<style>
+    .card-item.border, .card-item.border-primary {
+        border: 1px solid #dee2e6;
+    }
+
+    .card-item.border-primary {
+        border-color: #0d6efd !important;
+    }
+</style>
