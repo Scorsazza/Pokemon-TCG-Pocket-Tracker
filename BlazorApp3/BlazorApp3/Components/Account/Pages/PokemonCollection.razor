@@ -268,6 +268,9 @@
 
     private void ApplyFilters()
     {
+                var rarityOrder = new[] {
+            "Common", "Uncommon", "Rare", "EX Cards", "Full Art", "Enhanced Full Art", "Immersive", "Gold", "Promo"
+        };
         var filtered = viewCards.AsEnumerable();
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
@@ -290,14 +293,14 @@
         else if (tradeFilter == "keep")
             filtered = filtered.Where(c => !c.IsForTrade);
 
-        filtered = sortBy switch
-        {
-            "name" => filtered.OrderBy(c => c.Name),
-            "pack" => filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber),
-            "rarity" => filtered.OrderBy(c => c.Rarity).ThenBy(c => c.Name),
-            "quantity" => filtered.OrderByDescending(c => c.Quantity).ThenBy(c => c.Name),
-            "number" => filtered.OrderBy(c => int.TryParse(c.CardNumber, out var num) ? num : int.MaxValue),
-            _ => filtered.OrderBy(c => c.CardNumber)
+        filtered = sortBy switch  
+        {  
+            "name" => filtered.OrderBy(c => c.Name),  
+            "pack" => filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber),  
+            "rarity" => filtered.OrderBy(c => Array.IndexOf(rarityOrder, c.Rarity) == -1 ? int.MaxValue : Array.IndexOf(rarityOrder, c.Rarity)).ThenBy(c => c.Name),
+            "expansion" => filtered.OrderBy(c => c.Expansion).ThenBy(c => c.Pack).ThenBy(c => c.CardNumber),  
+            "number" => filtered.OrderBy(c => int.TryParse(c.CardNumber, out var num) ? num : int.MaxValue),  
+            _ => filtered.OrderBy(c => c.CardNumber)  
         };
 
         filteredCards = filtered.ToList();
