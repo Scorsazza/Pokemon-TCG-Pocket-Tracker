@@ -163,10 +163,12 @@
 
     void FilterCards(ChangeEventArgs e)
     {
+         var allowedRarities = new HashSet<string> { "Common", "Uncommon", "Rare", "EX Cards", "Full Art" };
         searchTerm = e.Value?.ToString() ?? string.Empty;
         filteredCards = string.IsNullOrWhiteSpace(searchTerm)
+
             ? new List<PokemonCard>()
-            : allCards.Where(c => c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+            : allCards.Where(c => c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) && allowedRarities.Contains(c.Rarity)).ToList();
     }
 
     void SelectCard(string id) => selectedCardId = id;
