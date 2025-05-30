@@ -130,7 +130,7 @@ namespace BlazorApp3.Controllers
                 "☆" => "Full Art",
                 "☆☆" => "Enhanced Full Art",
                 "☆☆☆" => "Immersive",
-                "♕" => "Hyper Rare",
+                "♕" => "Gold",
                 "Promo" => "Promo",
                 "Shop" => "Shop Exclusive",
                 _ => "Other"

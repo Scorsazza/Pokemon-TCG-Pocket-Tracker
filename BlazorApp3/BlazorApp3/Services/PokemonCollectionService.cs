@@ -97,7 +97,7 @@ namespace BlazorApp3.Services
                     "☆" => "Full Art",
                     "☆☆" => "Enhanced Full Art",
                     "☆☆☆" => "Immersive",
-                    "♕" => "Hyper Rare",
+                    "♕" => "Gold",
                     "Promo" => "Promo",
                     "Shop" => "Shop Exclusive",
                     _ => "Other"
