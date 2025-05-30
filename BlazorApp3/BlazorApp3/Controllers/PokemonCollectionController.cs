@@ -72,10 +72,11 @@ namespace BlazorApp3.Controllers
                     {
                         existingCard.Name = apiCard.Name;
                         existingCard.Pack = apiCard.Pack;
+
                         existingCard.Rarity = convertedRarity;
                         existingCard.CardNumber = cardNumber;
                         existingCard.ImageUrl = apiCard.Image;
-                        existingCard.Type = ""; // Not present in API
+                        existingCard.Type = apiCard.Type;
                         existingCard.UpdatedAt = DateTime.UtcNow;
                         updatedCards.Add(existingCard);
                     }
@@ -90,7 +91,7 @@ namespace BlazorApp3.Controllers
                             CardNumber = cardNumber,
                             
                             ImageUrl = apiCard.Image,
-                            Type = "",
+                            Type = apiCard.Type,
                             CreatedAt = DateTime.UtcNow,
                             UpdatedAt = DateTime.UtcNow
                         };
@@ -315,7 +316,8 @@ namespace BlazorApp3.Controllers
         public string Rarity { get; set; } = "";
         public string Pack { get; set; } = "";
         public string Health { get; set; } = "";
-
+        
+        public string Type { get; set; } = "";
         public string Expansion { get; set; } = "";
         public string Image { get; set; } = "";
         public string FullArt { get; set; } = "";

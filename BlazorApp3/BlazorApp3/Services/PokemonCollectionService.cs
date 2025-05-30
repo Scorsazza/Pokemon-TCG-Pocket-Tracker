@@ -38,6 +38,7 @@ namespace BlazorApp3.Services
             ["Solgaleo"] = "Celestial Guardians",
             ["Lunala"] = "Celestial Guardians",
             ["Shared(Celestial Guardians)"] = "Celestial Guardians",
+            ["Extradimensional Crisis"] = "Extradimensional Crisis",
             ["Promo V1"] = "Promo Cards",
             ["Promo V2"] = "Promo Cards",
             ["Promo V3"] = "Promo Cards",
@@ -46,14 +47,16 @@ namespace BlazorApp3.Services
             ["Promo V6"] = "Promo Cards",
             ["Promo V7"] = "Promo Cards",
             ["Promo V8"] = "Promo Cards",
+            ["Promo V9"] = "Promo Cards",
+            ["Promo V10"] = "Promo Cards",
             ["Shop"] = "Promo Cards",
             ["Shop Bundle"] = "Promo Cards",
             ["Premium Missions"] = "Promo Cards",
             ["Missions"] = "Promo Cards",
             ["Campaign"] = "Promo Cards",
-            ["Wonder Pick"] = "Promo Cards"
-
-
+            ["Wonder Pick"] = "Promo Cards",
+            ["Unknown"] = "Promo Cards",
+            ["Error"] = "Promo Cards"
         };
 
         private string GetExpansionFromPack(string pack)
@@ -78,6 +81,13 @@ namespace BlazorApp3.Services
             {
                 if (string.IsNullOrWhiteSpace(a.Pack)) continue;
 
+                if (a.Pack == "Error") // Fix for the dodgy Mewtwo card
+                {
+                    a.Pack = "Shop"; 
+                    
+                    
+                }
+
                 var rarity = a.Rarity.Trim() switch
                 {
                     "◊" => "Common",
@@ -101,6 +111,7 @@ namespace BlazorApp3.Services
                     card.Name = a.Name;
                     card.Pack = a.Pack;
                     card.Expansion = expansion;
+                    card.Type = a.Type;
                     card.Rarity = rarity;
                     card.CardNumber = number;
                     card.ImageUrl = a.Image;
@@ -113,6 +124,7 @@ namespace BlazorApp3.Services
                         Id = a.Id,
                         Name = a.Name,
                         Pack = a.Pack,
+                        Type = a.Type,
                         Expansion = expansion,
                         Rarity = rarity,
                         CardNumber = number,

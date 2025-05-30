@@ -1,4 +1,5 @@
-﻿@page "/AllCards"
+﻿
+@page "/AllCards"
 @using BlazorApp3.Data.Models
 @using System.Security.Claims
 @using BlazorApp3.Services
@@ -8,10 +9,10 @@
 @rendermode InteractiveServer
 @inherits ComponentBase
 
-<PageTitle>⚡ All Pokémon Cards</PageTitle>
+<PageTitle>All Pokémon Cards</PageTitle>
 
 <div class="container mt-4">
-    <h1 class="mb-4">⚡ Browse All Cards</h1>
+    <h1 class="mb-4">Browse All Cards</h1>
 
     <!-- Controls Row -->
     <div class="row mb-4">
@@ -21,12 +22,13 @@
         </div>
         <div class="col-md-3">
             <select class="form-select" @bind="sortBy" @bind:after="ApplyFilters">
+                <option value="number">Sort by Card Number</option>
                 <option value="name">Sort by Name</option>
                 <option value="pack">Sort by Pack</option>
                 <option value="rarity">Sort by Rarity</option>
                 <option value="expansion">Sort by Expansion</option>
                 <option value="newest">Sort by Newest</option>
-                <option value="number">Sort by Card Number</option> 
+                 
             </select>
         </div>
         <div class="col-md-3">
@@ -132,8 +134,7 @@
                         </div>
                         <img src="@card.ImageUrl" class="card-img-top" alt="@card.Name" />
                         <div class="card-body d-flex flex-column">
-                            <h5 class="card-title">@card.Name</h5>
-                            <p class="card-text mb-1">Card Number: @card.CardNumber</p>
+                             <h5 class="card-title">@card.Name                    #@card.CardNumber</h5>
                             <p class="card-text mb-1">Pack: @card.Pack</p>
                             <p class="card-text mb-1">Expansion: @card.Expansion</p>
                             <p class="card-text mb-3">Rarity: @card.Rarity</p>
@@ -158,7 +159,7 @@
     private List<ViewCard> filteredCards = new();
 
     private string searchTerm = "";
-    private string sortBy = "name";
+    private string sortBy = "number";
     private string selectedPack = "";
     private string selectedRarity = "";
     private string selectedExpansion = "";
@@ -205,7 +206,9 @@
 
        
         availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
-        availableExpansions = viewCards.Select(c => c.Expansion).Distinct().OrderBy(e => e).ToList();
+        var ExpansionOrder = new[]
+            {   "Genetic Apex", "Mythical Island", "Space-Time Smackdown", "Triumphant Light", "Shining Revelry", "Celestial Guardians", "Extradimensional Crisis"};
+            availableExpansions = viewCards.Select(c => c.Expansion).Distinct().OrderBy(r => Array.IndexOf(ExpansionOrder, r) == -1 ? int.MaxValue : Array.IndexOf(ExpansionOrder, r)).ToList();
 
         // Rarity order because i said so.
         var rarityOrder = new[] {
