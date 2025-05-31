@@ -179,33 +179,39 @@
     protected override async Task OnInitializedAsync() => await Load();
 
     private async Task Load()
-{
-    isLoading = true;
-    error = null;
-    try
     {
-        var all = await CollectionSvc.GetAllCardsAsync();
-        totalAvailableCards = all.Select(c => c.Id).Distinct().Count();
+        isLoading = true;
+        error = null;
+        try
+        {
+            var all = await CollectionSvc.GetAllCardsAsync();
+            totalAvailableCards = all.Select(c => c.Id).Distinct().Count();
 
-        var auth = await AuthState.GetAuthenticationStateAsync();
-        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var owned = uid is null ? new List<CardCollectionDto>() : await CollectionSvc.GetMyCollectionAsync(uid);
-        var ownedIds = owned.Select(o => o.CardId).ToHashSet();
-        myCollectedCards = ownedIds.Count;
+            var auth = await AuthState.GetAuthenticationStateAsync();
+            var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var owned = uid is null ? new List<CardCollectionDto>() : await CollectionSvc.GetMyCollectionAsync(uid);
+            var ownedIds = owned.Select(o => o.CardId).ToHashSet();
+            myCollectedCards = ownedIds.Count;
 
-        viewCards = all.Select(c => new ViewCard(
-            c.Id,
-            c.Name,
-            c.Pack,
-            c.Rarity,
-            c.Expansion,
-            c.CardNumber,
-            c.ImageUrl,
-            ownedIds.Contains(c.Id)
-        )).ToList();
+            viewCards = all.Select(c => new ViewCard(
+                c.Id,
+                c.Name,
+                c.Pack,
+                c.Rarity,
+                c.Expansion,
+                c.CardNumber,
+                c.ImageUrl,
+                ownedIds.Contains(c.Id)
+            )).ToList();
 
-       
-        availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
+        //Packs in order they released with Promo packs after main expansions
+        var PackOrder = new[]
+            { "Charizard", "Mewtwo", "Pikachu", "Shared(Genetic Apex)", "Mythical Island", "Dialga", "Palkia", "Shared(Space-Time Smackdown)","Triumphant Light", "Shining Revelry", 
+            "Solgaleo", "Lunala", "Shared(Celestial Guardians)", "Extradimensional Crisis", "Promo V1", "Promo V2", "Promo V3", "Promo V4", "Promo V5", "Promo V6", "Promo V7", "Promo V8",
+            "Promo V9", "Promo V10"};
+            availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => Array.IndexOf(PackOrder, p) == -1 ? int.MaxValue : Array.IndexOf(PackOrder, p)).ToList();
+
+        //Expansions in order of release (with Promo-A last)
         var ExpansionOrder = new[]
             {   "Genetic Apex", "Mythical Island", "Space-Time Smackdown", "Triumphant Light", "Shining Revelry", "Celestial Guardians", "Extradimensional Crisis"};
             availableExpansions = viewCards.Select(c => c.Expansion).Distinct().OrderBy(r => Array.IndexOf(ExpansionOrder, r) == -1 ? int.MaxValue : Array.IndexOf(ExpansionOrder, r)).ToList();

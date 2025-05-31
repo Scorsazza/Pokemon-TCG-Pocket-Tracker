@@ -235,7 +235,11 @@
 
             myCollectedCards = viewCards.Select(c => c.CardId).Distinct().Count();
 
-            availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
+            var PackOrder = new[]
+            { "Charizard", "Mewtwo", "Pikachu", "Shared(Genetic Apex)", "Mythical Island", "Dialga", "Palkia", "Shared(Space-Time Smackdown)","Triumphant Light", "Shining Revelry", 
+            "Solgaleo", "Lunala", "Shared(Celestial Guardians)", "Extradimensional Crisis", "Promo V1", "Promo V2", "Promo V3", "Promo V4", "Promo V5", "Promo V6", "Promo V7", "Promo V8",
+            "Promo V9", "Promo V10"};
+            availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => Array.IndexOf(PackOrder, p) == -1 ? int.MaxValue : Array.IndexOf(PackOrder, p)).ToList();
 
             var rarityOrder = new[]
             {
