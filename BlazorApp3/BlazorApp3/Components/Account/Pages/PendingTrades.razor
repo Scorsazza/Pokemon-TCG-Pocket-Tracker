@@ -1,0 +1,242 @@
+﻿@page "/pendingtrades"
+@using System.Collections.Generic
+@using System.Linq
+@using System.Threading.Tasks
+@using System.Security.Claims
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
+@using BlazorApp3.Data.Models
+@using BlazorApp3.Data
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthState
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Pending Trades</PageTitle>
+
+<div class="container py-4">
+    <h1 class="mb-4">Pending Trades</h1>
+
+    @if (isLoading)
+    {
+        <div class="text-center">
+            <div class="spinner-border text-secondary" role="status"></div>
+        </div>
+    }
+    else if (!pendingTrades.Any())
+    {
+        <div class="alert alert-info">
+            <h5>No pending trades</h5>
+            <p>
+                When offers are accepted on bounties, they will appear here as pending trades
+                for coordination between you and the other trader.
+            </p>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            @foreach (var trade in pendingTrades)
+            {
+                <div class="col-md-6 mb-4">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">Trade #@trade.Id</h6>
+                            <small class="text-muted">@trade.CreatedAt.ToLocalTime().ToString("g")</small>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <!-- Requested Card (What the bounty was for) -->
+                                <div class="col-6">
+                                    <h6 class="text-center mb-2">Requested Card</h6>
+                                    <div class="text-center">
+                                        <img src="@trade.RequestedCardImageUrl"
+                                             alt="@trade.RequestedCardName"
+                                             class="img-fluid mb-2"
+                                             style="height:120px; object-fit:contain;" />
+                                        <div class="small">
+                                            <strong>@trade.RequestedCardName</strong><br />
+                                            Wanted by: <strong>@trade.BountyOwnerName</strong><br />
+                                            Friend Code:&nbsp;
+                                            <span class="badge bg-primary">
+                                                @trade.BountyOwnerFriendCode
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Offered Card (What was offered in exchange) -->
+                                <div class="col-6">
+                                    <h6 class="text-center mb-2">Offered Card</h6>
+                                    <div class="text-center">
+                                        <img src="@trade.OfferedCardImageUrl"
+                                             alt="@trade.OfferedCardName"
+                                             class="img-fluid mb-2"
+                                             style="height:120px; object-fit:contain;" />
+                                        <div class="small">
+                                            <strong>@trade.OfferedCardName</strong><br />
+                                            Offered by: <strong>@trade.OffererName</strong><br />
+                                            Friend Code:&nbsp;
+                                            <span class="badge bg-success">
+                                                @trade.OffererFriendCode
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr />
+
+                            <div class="text-center">
+                                <p class="mb-2"><strong>Trade Instructions:</strong></p>
+                                <p class="small text-muted mb-3">
+                                    Both parties should add each other using the friend codes above,
+                                    then coordinate the trade in‐game. Once completed, mark this trade as finished.
+                                </p>
+
+                                @if (trade.Status == TradeStatus.Pending)
+                                {
+                                    <button class="btn btn-success btn-sm me-2"
+                                            @onclick="() => CompleteTrade(trade.Id)">
+                                        Mark as Completed
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm"
+                                            @onclick="() => CancelTrade(trade.Id)">
+                                        Cancel Trade
+                                    </button>
+                                }
+                                else if (trade.Status == TradeStatus.Completed)
+                                {
+                                    <span class="badge bg-success">✓ Completed</span>
+                                }
+                                else if (trade.Status == TradeStatus.Cancelled)
+                                {
+                                    <span class="badge bg-danger">✗ Cancelled</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private string? currentUserId = null;
+    private List<PendingTradeDto> pendingTrades = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        isLoading = false;
+    }
+
+    private async Task LoadData()
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        currentUserId = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(currentUserId))
+            return;
+
+        var acceptedOffers = await Db.BountyOffers
+            .Include(o => o.BountyRequest)
+                .ThenInclude(br => br.User)
+            .Include(o => o.BountyRequest)
+                .ThenInclude(br => br.Card)
+            .Include(o => o.Offerer)
+            .Include(o => o.Card)
+            .Where(o => o.Status == OfferStatus.Accepted &&
+                   o.BountyRequest.Status == BountyStatus.Completed &&
+                   (o.BountyRequest.UserId == currentUserId || o.OffererId == currentUserId))
+            .ToListAsync();
+
+        pendingTrades = acceptedOffers
+            .Select(o => new PendingTradeDto
+            {
+                Id = o.Id,
+
+                BountyOwnerName = o.BountyRequest.User.UserName ?? "Unknown",
+                BountyOwnerFriendCode = o.BountyRequest.OfferedItem,
+
+                OffererName = o.Offerer.UserName ?? "Unknown",
+                OffererFriendCode = o.FriendCode,
+
+                RequestedCardName = o.BountyRequest.Card.Name,
+                RequestedCardImageUrl = o.BountyRequest.Card.ImageUrl,
+
+                OfferedCardName = o.Card.Name,
+                OfferedCardImageUrl = o.Card.ImageUrl,
+
+                Status = TradeStatus.Pending,
+                CreatedAt = o.CreatedAt
+            })
+            .OrderByDescending(t => t.CreatedAt)
+            .ToList();
+    }
+
+    private async Task CompleteTrade(int tradeId)
+    {
+        var confirmComplete = await JS.InvokeAsync<bool>("confirm",
+            "Are you sure you want to mark this trade as completed? This action cannot be undone.");
+        if (!confirmComplete) return;
+
+        var offer = await Db.BountyOffers.FindAsync(tradeId);
+        if (offer != null)
+        {
+            // Keep the bounty “completed” (it already got marked Completed on accept)
+            await JS.InvokeVoidAsync("alert", "Trade marked as completed! The bounty will remain closed.");
+            await LoadData();
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelTrade(int tradeId)
+    {
+        var confirmCancel = await JS.InvokeAsync<bool>("confirm",
+            "Are you sure you want to cancel this trade? The bounty will be reopened for new offers.");
+        if (!confirmCancel) return;
+
+        var offer = await Db.BountyOffers
+            .Include(o => o.BountyRequest)
+            .FirstOrDefaultAsync(o => o.Id == tradeId);
+        if (offer != null)
+        {
+            // Reopen the bounty for new offers
+            offer.BountyRequest.Status = BountyStatus.Active;
+            offer.Status = OfferStatus.Cancelled;
+            await Db.SaveChangesAsync();
+
+            await LoadData();
+            StateHasChanged();
+        }
+    }
+
+    private class PendingTradeDto
+    {
+        public int Id { get; set; }
+
+        public string BountyOwnerName { get; set; } = "";
+        public string BountyOwnerFriendCode { get; set; } = "";
+
+        public string OffererName { get; set; } = "";
+        public string OffererFriendCode { get; set; } = "";
+
+        public string RequestedCardName { get; set; } = "";
+        public string RequestedCardImageUrl { get; set; } = "";
+
+        public string OfferedCardName { get; set; } = "";
+        public string OfferedCardImageUrl { get; set; } = "";
+
+        public TradeStatus Status { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public enum TradeStatus
+    {
+        Pending,
+        Completed,
+        Cancelled
+    }
+}

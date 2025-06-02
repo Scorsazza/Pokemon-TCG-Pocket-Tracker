@@ -11,13 +11,14 @@ using Microsoft.AspNetCore.Components.WebAssembly.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading.Tasks;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1) Blazor WASM components & authentication state
+// --- Blazor Server-Interactive + Auth state ---
 builder.Services.AddRazorComponents()
     .AddInteractiveWebAssemblyComponents()
     .AddInteractiveServerComponents()
@@ -27,7 +28,26 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityUserAccessor>();
 builder.Services.AddScoped<IdentityRedirectManager>();
 
-// 2) Identity cookie schemes
+// --- CRUCIAL: HttpClient that preserves cookies ---
+builder.Services.AddScoped(sp =>
+{
+    var nav = sp.GetRequiredService<NavigationManager>();
+    var handler = new HttpClientHandler
+    {
+        UseCookies = true,
+        CookieContainer = new System.Net.CookieContainer()
+    };
+    var client = new HttpClient(handler)
+    {
+        BaseAddress = new Uri(nav.BaseUri)
+    };
+    // ensure JSON
+    client.DefaultRequestHeaders.Accept.Add(
+        new MediaTypeWithQualityHeaderValue("application/json"));
+    return client;
+});
+
+// --- Identity cookie schemes ---
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
@@ -37,11 +57,12 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// 3) EF Core + Identity stores - CHANGED TO SQLITE
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-                       ?? "Data Source=app.db"; // Default SQLite connection string
+// --- EF Core & Identity stores (SQLite) ---
+var connectionString = builder.Configuration
+    .GetConnectionString("DefaultConnection")
+    ?? "Data Source=app.db";
 builder.Services.AddDbContext<ApplicationDbContext>(opts =>
-    opts.UseSqlite(connectionString)); // Changed from UseSqlServer to UseSqlite
+    opts.UseSqlite(connectionString));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
@@ -54,37 +75,25 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     options.Password.RequireUppercase = false;
     options.Password.RequireLowercase = false;
     options.Password.RequiredUniqueChars = 1;
-    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
-    options.Lockout.MaxFailedAccessAttempts = 5;
-    options.Lockout.AllowedForNewUsers = true;
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddSignInManager()
 .AddDefaultTokenProviders();
 
-// 4) Register IHttpClientFactory so the service can inject it
+// --- App services & controllers ---
 builder.Services.AddHttpClient();
-
-// 5) Application service
 builder.Services.AddScoped<IPokemonCollectionService, PokemonCollectionService>();
-
-// 6) MVC Controllers (disable antiforgery for API)
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add(new IgnoreAntiforgeryTokenAttribute());
 });
-
-// 7) Add Antiforgery services
 builder.Services.AddAntiforgery();
-
-// 8) Caching & memory
 builder.Services.AddResponseCaching();
 builder.Services.AddMemoryCache();
 
 var app = builder.Build();
 
-// --- Middleware pipeline ---
-
+// --- Middleware ---
 if (app.Environment.IsDevelopment())
 {
     app.UseWebAssemblyDebugging();
@@ -98,37 +107,32 @@ else
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
-// ROUTING
 app.UseRouting();
 
-// AUTHENTICATION & AUTHORIZATION
+// Auth must come before MapControllers
 app.UseAuthentication();
 app.UseAuthorization();
 
-// ANTIFORGERY - Must come after UseAuthentication() and UseAuthorization()
 app.UseAntiforgery();
-
 app.UseResponseCaching();
 
-// Endpoints
+// --- Endpoints ---
 app.MapControllers();
 app.MapAdditionalIdentityEndpoints();
+
 app.MapRazorComponents<App>()
    .AddInteractiveServerRenderMode()
    .AddInteractiveWebAssemblyRenderMode()
    .AddAdditionalAssemblies(typeof(BlazorApp3.Client._Imports).Assembly);
 
-// Simple test
+// Health check
 app.MapGet("/api/test", () => "API works!");
 
-// Ensure DB & seed - CHANGED TO USE MIGRATE INSTEAD OF ENSURECREATED
+// Migrate & seed
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var um = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-
-    // Use Migrate() instead of EnsureCreated() for better SQLite support
     await ctx.Database.MigrateAsync();
     await SeedInitialData(ctx, um);
 }

@@ -5,11 +5,16 @@
 
 @rendermode InteractiveServer
 
-<PageTitle>🏅 Collection Leaderboard</PageTitle>
+<PageTitle>Collection Leaderboard</PageTitle>
 
 <div class="container mt-4">
     <h1 class="text-center mb-2">🏅 Top Collectors</h1>
-    <p class="text-center text-muted mb-4">See who’s leading the Pokémon collection game!</p>
+
+    <div class="d-flex justify-content-center align-items-center mb-3">
+        <button class="btn btn-outline-light btn-sm me-2" @onclick="PrevExpansion">◀</button>
+        <span class="fw-bold">@CurrentExpansionDisplay</span>
+        <button class="btn btn-outline-light btn-sm ms-2" @onclick="NextExpansion">▶</button>
+    </div>
 
     @if (isLoading)
     {
@@ -75,11 +80,12 @@
                     </table>
                 </div>
                 <div class="text-end mt-3">
-                    <small class="text-light-emphasis">📅 Last updated: @TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time")).ToShortTimeString()</small>
+                    <small class="text-light-emphasis">
+                        📅 Last updated: @TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time")).ToShortTimeString()
+                    </small>
                 </div>
             </div>
         </div>
-
     }
 </div>
 
@@ -88,8 +94,24 @@
     private string? error;
     private List<LeaderboardEntry> leaderboard = new();
 
+    private List<string> expansions = new();
+    private int expansionIndex = 0;
+
+    private string CurrentExpansionDisplay =>
+        expansions.Count == 0 ? "Loading expansions…" : expansions[expansionIndex];
+
     protected override async Task OnInitializedAsync()
     {
+        try
+        {
+            var fetched = await CollectionSvc.GetAllExpansionsAsync();
+            expansions = new List<string> { "All" };
+            expansions.AddRange(fetched);
+        }
+        catch
+        {
+            expansions = new List<string> { "All" };
+        }
         await LoadLeaderboard();
     }
 
@@ -97,10 +119,12 @@
     {
         isLoading = true;
         error = null;
-
         try
         {
-            leaderboard = await CollectionSvc.GetLeaderboardAsync(10);
+            string? filter = expansions[expansionIndex] == "All"
+                ? null
+                : expansions[expansionIndex];
+            leaderboard = await CollectionSvc.GetLeaderboardAsync(10, filter);
         }
         catch (Exception ex)
         {
@@ -110,5 +134,23 @@
         {
             isLoading = false;
         }
+    }
+
+    private async Task PrevExpansion()
+    {
+        if (expansions.Count == 0) return;
+        expansionIndex = (expansionIndex == 0)
+            ? expansions.Count - 1
+            : expansionIndex - 1;
+        await LoadLeaderboard();
+    }
+
+    private async Task NextExpansion()
+    {
+        if (expansions.Count == 0) return;
+        expansionIndex = (expansionIndex == expansions.Count - 1)
+            ? 0
+            : expansionIndex + 1;
+        await LoadLeaderboard();
     }
 }

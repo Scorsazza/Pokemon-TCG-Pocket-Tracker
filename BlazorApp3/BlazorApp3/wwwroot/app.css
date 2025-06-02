@@ -18,6 +18,12 @@ a, .btn-link {
         text-decoration: underline !important;
     }
 
+
+.glowing-text {
+    color: #fff;
+    text-shadow: 0 0 5px #00f7ff, 0 0 10px #00f7ff, 0 0 20px #00f7ff, 0 0 40px #0ff;
+}
+
 /* Navigation links - override Bootstrap defaults */
 .nav-link {
     color: #e2e8f0 !important;

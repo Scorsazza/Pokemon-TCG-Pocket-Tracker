@@ -1,4 +1,5 @@
-﻿@page "/pokemon-collection"
+﻿@page "/"
+@page "/pokemon-collection"
 @using System.Security.Claims
 @using BlazorApp3.Data.Models
 @using BlazorApp3.Services
@@ -7,48 +8,44 @@
 @inject IJSRuntime JS
 @rendermode InteractiveServer
 @inherits ComponentBase
+@implements IDisposable
 
 <PageTitle>Pokémon TCG Pocket Collection Tracker</PageTitle>
 
-<div class="container mt-4">
-    <h1 class="mb-4">🏆 My Pokémon Collection</h1>
+<div class="container-fluid mt-6">
+    <h1 class="mb-4">My Pokémon Collection</h1>
 
     <AuthorizeView>
         <Authorized>
-            <!-- Controls Row -->
             <div class="row mb-4">
-                <div class="col-md-4">
+                <div class="col-md-2">
                     <button class="btn btn-primary w-100" @onclick="Sync" disabled="@isSyncing">
                         @(isSyncing ? "🔄 Syncing..." : "🔄 Sync Cards")
                     </button>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-2">
+                    <button class="btn btn-danger w-100" @onclick="RemoveAll">
+                        Remove All
+                    </button>
+                </div>
+                <div class="col-md-8">
                     <input type="text" class="form-control" placeholder="🔍 Search cards..."
                            @bind="searchTerm" @oninput="OnSearchChanged" />
                 </div>
+            </div>
+            <div class="row mb-4">
                 <div class="col-md-4">
                     <select class="form-select" @bind="sortBy" @bind:after="ApplyFilters">
+                        <option value="number">Sort by Card Number</option>
                         <option value="name">Sort by Name</option>
                         <option value="pack">Sort by Pack</option>
                         <option value="rarity">Sort by Rarity</option>
+                        <option value="type">Sort By Type</option>
                         <option value="quantity">Sort by Quantity</option>
                         <option value="newest">Sort by Newest</option>
                     </select>
                 </div>
-            </div>
-
-            <!-- Filters Row -->
-            <div class="row mb-4">
-                <div class="col-md-3">
-                    <select class="form-select" @bind="selectedPack" @bind:after="ApplyFilters">
-                        <option value="">All Packs</option>
-                        @foreach (var pack in availablePacks)
-                        {
-                            <option value="@pack">@pack</option>
-                        }
-                    </select>
-                </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <select class="form-select" @bind="selectedRarity" @bind:after="ApplyFilters">
                         <option value="">All Rarities</option>
                         @foreach (var rarity in availableRarities)
@@ -57,7 +54,18 @@
                         }
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
+                    <select class="form-select" @bind="selectedType" @bind:after="ApplyFilters">
+                        <option value="">All Types</option>
+                        @foreach (var type in availableTypes)
+                        {
+                            <option value="@type">@type</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="row mb-4">
+                <div class="col-md-4">
                     <select class="form-select" @bind="selectedExpansion" @bind:after="ApplyFilters">
                         <option value="">All Expansions</option>
                         @foreach (var expansion in availableExpansions)
@@ -66,38 +74,40 @@
                         }
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
+                    <select class="form-select" @bind="selectedPack" @bind:after="ApplyFilters">
+                        <option value="">All Packs</option>
+                        @foreach (var pack in availablePacks)
+                        {
+                            <option value="@pack">@pack</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
                     <select class="form-select" @bind="tradeFilter" @bind:after="ApplyFilters">
-                        <option value="all">All Cards</option>
+                        <option value="all">All Collected</option>
                         <option value="trade">For Trade</option>
                         <option value="keep">Keeping</option>
                     </select>
                 </div>
             </div>
-
-            <!-- Global Stats Bar -->
             <div class="row mb-2">
                 <div class="col-md-4">
                     <div class="px-3 py-2 rounded" style="background: #181b2a; color: #4dc2ff; font-weight: 500;">
-                        Collected: <span style="color: #fff">
-                            @myCollectedCards / @totalAvailableCards
-                            (@(totalAvailableCards == 0 ? 0 : (int)Math.Round(100.0 * myCollectedCards / totalAvailableCards))%)
-                        </span>
+                        Collected: <span style="color: #fff">@filteredOwnedCards / @filteredTotalCards (@(filteredTotalCards == 0 ? 0 : (int)Math.Round(100.0 * filteredOwnedCards / filteredTotalCards))%)</span>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="px-3 py-2 rounded" style="background: #ffe869; color: #181b2a; font-weight: 500;">
-                        Unique Cards Owned: <span style="color: #181b2a">@myCollectedCards</span>
+                        Unique Cards Owned: <span style="color: #181b2a">@filteredOwnedCards</span>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="px-3 py-2 rounded" style="background: #6cff8f; color: #181b2a; font-weight: 500;">
-                        Total Cards Available: <span style="color: #181b2a">@totalAvailableCards</span>
+                        Total Cards Available: <span style="color: #181b2a">@filteredTotalCards</span>
                     </div>
                 </div>
             </div>
-
-            <!-- Collection Display -->
             <div class="row">
                 @if (isLoading)
                 {
@@ -115,34 +125,38 @@
                 {
                     @foreach (var card in filteredCards)
                     {
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <div class="card">
-                                <img src="@card.ImageUrl" class="card-img-top" alt="@card.Name" />
+                                <img src="@card.ImageUrl" class="card-img-top" alt="@card.Name @card.CardNumber" />
                                 <div class="card-body d-flex flex-column">
-                                    <h5 class="card-title">@card.Name</h5>
+                                    <h5 class="card-title">@card.Name #@card.CardNumber</h5>
                                     <p class="card-text mb-1">Pack: @card.Pack</p>
-                                    <p class="card-text mb-1">Rarity: @card.Rarity</p>
                                     <p class="card-text mb-1">Expansion: @card.Expansion</p>
-
+                                    <p class="card-text mb-1">Type: @card.Type</p>
+                                    <p class="card-text mb-3">
+                                        Rarity: <span class="@GetRarityClass(card.Rarity)">@card.Rarity</span>
+                                    </p>
                                     <div class="input-group input-group-sm mb-2">
                                         <button class="btn btn-outline-secondary"
-                                                @onclick="() => AdjustQuantity(card, -1)"
+                                                @onmousedown="() => StartAdjusting(card, -1)"
+                                                @onmouseup="StopAdjusting"
+                                                @onmouseleave="StopAdjusting"
+                                                @ontouchstart="() => StartAdjusting(card, -1)"
+                                                @ontouchend="StopAdjusting"
                                                 disabled="@(card.Quantity <= 0)">
                                             −
                                         </button>
-
-                                        <input type="number"
-                                               class="form-control text-center"
-                                               value="@card.Quantity"
-                                               min="0"
-                                               @onchange="(e) => QuantityChanged(card, e)" />
-
+                                        <span class="form-control text-center bg-light">@card.Quantity</span>
                                         <button class="btn btn-outline-secondary"
-                                                @onclick="() => AdjustQuantity(card, +1)">
+                                                @onmousedown="() => StartAdjusting(card, +1)"
+                                                @onmouseup="StopAdjusting"
+                                                @onmouseleave="StopAdjusting"
+                                                @ontouchstart="() => StartAdjusting(card, +1)"
+                                                @ontouchend="StopAdjusting"
+                                                disabled="@(card.Quantity >= 100)">
                                             +
                                         </button>
                                     </div>
-
                                     @if (card.IsForTrade)
                                     {
                                         <span class="badge bg-warning text-dark mt-auto">For Trade</span>
@@ -168,28 +182,29 @@
     private string? error;
     private List<ViewCard> viewCards = new();
     private List<ViewCard> filteredCards = new();
+    private int filteredOwnedCards = 0;
+    private int filteredTotalCards = 0;
 
     private string searchTerm = "";
-    private string sortBy = "name";
+    private string sortBy = "number";
     private string selectedPack = "";
     private string selectedRarity = "";
     private string selectedExpansion = "";
+    private string selectedType = "";
     private string tradeFilter = "all";
 
     private List<string> availablePacks = new();
     private List<string> availableRarities = new();
     private List<string> availableExpansions = new();
+    private List<string> availableTypes = new();
 
-    // Global collection stats
-    private int totalAvailableCards = 0;    // All unique cards in the game
-    private int myCollectedCards = 0;       // Unique cards you own
-
-    public record ViewCard(
+    private record ViewCard(
         string CardId,
         string Name,
         string Pack,
         string Rarity,
         string Expansion,
+        string Type,
         string CardNumber,
         string ImageUrl,
         bool IsCollected,
@@ -216,30 +231,60 @@
             var auth = await AuthState.GetAuthenticationStateAsync();
             var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)!.Value;
 
-            // Fetch all possible cards (global)
-            var allCards = await CollectionSvc.GetAllCardsAsync();
-            totalAvailableCards = allCards.Select(c => c.Id).Distinct().Count();
-
-            // Fetch your collection
             var owned = await CollectionSvc.GetMyCollectionAsync(uid, isCollected: true);
             viewCards = owned.Select(o => new ViewCard(
-                o.CardId,
-                o.Name,
-                o.Pack,
-                o.Rarity,
-                o.Expansion,
-                o.CardNumber,
-                o.ImageUrl,
-                true,
-                o.Quantity,
-                o.IsForTrade
+                o.CardId, o.Name, o.Pack, o.Rarity, o.Expansion, o.Type, o.CardNumber,
+                o.ImageUrl, true, o.Quantity, o.IsForTrade
             )).ToList();
 
-            myCollectedCards = viewCards.Select(c => c.CardId).Distinct().Count();
+            var PackOrder = new[]
+            {
+                "Charizard", "Mewtwo", "Pikachu", "Shared(Genetic Apex)", "Mythical Island",
+                "Dialga", "Palkia", "Shared(Space-Time Smackdown)", "Triumphant Light",
+                "Shining Revelry", "Solgaleo", "Lunala", "Shared(Celestial Guardians)",
+                "Extradimensional Crisis", "Promo Cards", "Campaign", "Wonder pick",
+                "Missions", "Premium Missions", "Shop"
+            };
+            availablePacks = viewCards
+                .Select(c => c.Pack)
+                .Distinct()
+                .OrderBy(p => Array.IndexOf(PackOrder, p) == -1 ? int.MaxValue : Array.IndexOf(PackOrder, p))
+                .ToList();
 
-            availablePacks = viewCards.Select(c => c.Pack).Distinct().OrderBy(p => p).ToList();
-            availableRarities = viewCards.Select(c => c.Rarity).Distinct().OrderBy(r => r).ToList();
-            availableExpansions = viewCards.Select(c => c.Expansion).Distinct().OrderBy(e => e).ToList();
+            var ExpansionOrder = new[]
+            {
+                "Genetic Apex", "Mythical Island", "Space-Time Smackdown",
+                "Triumphant Light", "Shining Revelry", "Celestial Guardians", "Extradimensional Crisis"
+            };
+            availableExpansions = viewCards
+                .Select(c => c.Expansion)
+                .Distinct()
+                .OrderBy(r => Array.IndexOf(ExpansionOrder, r) == -1 ? int.MaxValue : Array.IndexOf(ExpansionOrder, r))
+                .ToList();
+
+            var rarityOrder = new[]
+            {
+                "Common", "Uncommon", "Rare", "EX Cards", "Full Art",
+                "Enhanced Full Art", "Immersive", "Gold", "Promo"
+            };
+            availableRarities = viewCards
+                .Select(c => c.Rarity)
+                .Distinct()
+                .OrderBy(r => Array.IndexOf(rarityOrder, r) == -1 ? int.MaxValue : Array.IndexOf(rarityOrder, r))
+                .ThenBy(r => r)
+                .ToList();
+
+            var TypeOrder = new[]
+            {
+                "Grass", "Fire", "Water", "Lightning",
+                "Psychic", "Fighting", "Darkness", "Metal",
+                "Dragon", "Colorless"
+            };
+            availableTypes = viewCards
+                .Select(c => c.Type)
+                .Distinct()
+                .OrderBy(t => Array.IndexOf(TypeOrder, t) == -1 ? int.MaxValue : Array.IndexOf(TypeOrder, t))
+                .ToList();
 
             ApplyFilters();
         }
@@ -253,15 +298,43 @@
         }
     }
 
+    private async Task RemoveAll()
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm", "Are you sure you want to remove all collected cards?");
+        if (!confirm) return;
+        isLoading = true;
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)!.Value;
+        foreach (var card in viewCards.Where(c => c.IsCollected))
+        {
+            await CollectionSvc.RemoveCardAsync(uid, card.CardId);
+        }
+        await Load();
+    }
+
     private void ApplyFilters()
     {
+        var rarityOrder = new[]
+        {
+            "Common", "Uncommon", "Rare", "EX Cards", "Full Art",
+            "Enhanced Full Art", "Immersive", "Gold", "Promo"
+        };
+        var TypeOrder = new[]
+        {
+            "Grass", "Fire", "Water", "Lightning",
+            "Psychic", "Fighting", "Darkness", "Metal",
+            "Dragon", "Colorless"
+        };
+
         var filtered = viewCards.AsEnumerable();
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
             filtered = filtered.Where(c =>
                 c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                c.Pack.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                c.CardNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+                c.CardNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+            );
+        }
 
         if (!string.IsNullOrEmpty(selectedPack))
             filtered = filtered.Where(c => c.Pack == selectedPack);
@@ -272,6 +345,9 @@
         if (!string.IsNullOrEmpty(selectedExpansion))
             filtered = filtered.Where(c => c.Expansion == selectedExpansion);
 
+        if (!string.IsNullOrEmpty(selectedType))
+            filtered = filtered.Where(c => c.Type == selectedType);
+
         if (tradeFilter == "trade")
             filtered = filtered.Where(c => c.IsForTrade);
         else if (tradeFilter == "keep")
@@ -281,12 +357,25 @@
         {
             "name" => filtered.OrderBy(c => c.Name),
             "pack" => filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber),
-            "rarity" => filtered.OrderBy(c => c.Rarity).ThenBy(c => c.Name),
-            "quantity" => filtered.OrderByDescending(c => c.Quantity).ThenBy(c => c.Name),
+            "rarity" => filtered
+                .OrderBy(c => Array.IndexOf(rarityOrder, c.Rarity) == -1
+                    ? int.MaxValue
+                    : Array.IndexOf(rarityOrder, c.Rarity))
+                .ThenBy(c => c.Name),
+            "type" => filtered
+                .OrderBy(c => Array.IndexOf(TypeOrder, c.Type) == -1
+                    ? int.MaxValue
+                    : Array.IndexOf(TypeOrder, c.Type))
+                .ThenBy(c => c.Name),
+            "expansion" => filtered.OrderBy(c => c.Expansion).ThenBy(c => c.Pack).ThenBy(c => c.CardNumber),
+            "number" => filtered.OrderBy(c =>
+                int.TryParse(c.CardNumber, out var num) ? num : int.MaxValue),
             _ => filtered.OrderBy(c => c.CardNumber)
         };
 
         filteredCards = filtered.ToList();
+        filteredTotalCards = filteredCards.Count;
+        filteredOwnedCards = filteredCards.Count(c => c.IsCollected);
     }
 
     private void OnSearchChanged(ChangeEventArgs e)
@@ -301,8 +390,9 @@
         selectedPack = "";
         selectedRarity = "";
         selectedExpansion = "";
+        selectedType = "";
         tradeFilter = "all";
-        sortBy = "name";
+        sortBy = "number";
         ApplyFilters();
     }
 
@@ -327,22 +417,76 @@
         var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (uid == null) return;
 
-        var newQty = Math.Max(0, card.Quantity + delta);
+        var newQty = Math.Clamp(card.Quantity + delta, 0, 100);
         await CollectionSvc.SetQuantityAsync(uid, card.CardId, newQty);
-        await Load();
+
+        var cardIndex = viewCards.FindIndex(c => c.CardId == card.CardId);
+        if (cardIndex >= 0)
+        {
+            viewCards[cardIndex] = card with { Quantity = newQty };
+            ApplyFilters();
+            StateHasChanged();
+        }
     }
 
-    private async Task QuantityChanged(ViewCard card, ChangeEventArgs e)
-    {
-        var auth = await AuthState.GetAuthenticationStateAsync();
-        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (uid == null) return;
+    private Timer? adjustTimer;
+    private ViewCard? currentCard;
+    private int currentDelta;
+    private bool isAdjusting = false;
 
-        if (int.TryParse(e.Value?.ToString(), out var newQty))
+    private async Task StartAdjusting(ViewCard card, int delta)
+    {
+        await AdjustQuantity(card, delta);
+        currentCard = card;
+        currentDelta = delta;
+        isAdjusting = true;
+        adjustTimer = new Timer(OnTimerTick, null, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(100));
+    }
+
+    private void OnTimerTick(object? state)
+    {
+        if (isAdjusting && currentCard != null)
         {
-            newQty = Math.Max(0, newQty);
-            await CollectionSvc.SetQuantityAsync(uid, card.CardId, newQty);
-            await Load();
+            InvokeAsync(async () =>
+            {
+                if ((currentDelta > 0 && currentCard.Quantity >= 100) ||
+                    (currentDelta < 0 && currentCard.Quantity <= 0))
+                {
+                    StopAdjusting();
+                    return;
+                }
+                await AdjustQuantity(currentCard, currentDelta);
+            });
         }
+    }
+
+    private void StopAdjusting()
+    {
+        isAdjusting = false;
+        adjustTimer?.Dispose();
+        adjustTimer = null;
+        currentCard = null;
+    }
+
+    private string GetRarityClass(string rarity)
+    {
+        return rarity switch
+        {
+            "Common" => "text-secondary",
+            "Uncommon" => "text-success",
+            "Rare" => "text-primary",
+            "EX Cards" => "text-warning",
+            "Full Art" => "text-info",
+            "Enhanced Full Art" => "text-primary fw-bold",
+            "Immersive" => "text-danger",
+            "Gold" => "text-warning fw-bold",
+            "Promo" => "text-muted",
+            _ => "text-dark"
+        };
+    }
+
+    public void Dispose()
+    {
+        adjustTimer?.Dispose();
     }
 }

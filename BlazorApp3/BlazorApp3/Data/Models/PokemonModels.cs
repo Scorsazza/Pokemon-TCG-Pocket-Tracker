@@ -124,6 +124,8 @@ namespace BlazorApp3.Data.Models
         [MaxLength(500)]
         public string Message { get; set; } = "";
 
+        public string FriendCode { get; set; } = "";
+
         public OfferStatus Status { get; set; } = OfferStatus.Pending;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

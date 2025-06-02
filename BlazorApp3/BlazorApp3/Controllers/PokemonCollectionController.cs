@@ -30,7 +30,6 @@ namespace BlazorApp3.Controllers
             _logger = logger;
         }
 
-        // POST: api/PokemonCollection/sync-cards
         [HttpPost("sync-cards")]
         public async Task<ActionResult> SyncCardsFromApi()
         {
@@ -40,34 +39,25 @@ namespace BlazorApp3.Controllers
                 var url = "https://raw.githubusercontent.com/chase-manning/pokemon-tcg-pocket-cards/main/v4.json";
                 var response = await httpClient.GetAsync(url);
                 var jsonString = await response.Content.ReadAsStringAsync();
-
                 if (!response.IsSuccessStatusCode)
                     return BadRequest("Failed to fetch card data from API.");
-
                 if (!jsonString.TrimStart().StartsWith("{") && !jsonString.TrimStart().StartsWith("["))
                     return BadRequest("Remote data was not JSON.");
-
                 var apiCards = JsonSerializer.Deserialize<List<ApiPokemonCard>>(jsonString, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
-
                 if (apiCards == null)
                     return BadRequest("Invalid card data format.");
-
                 var existingCards = await _context.PokemonCards.ToDictionaryAsync(c => c.Id, c => c);
                 var newCards = new List<PokemonCard>();
                 var updatedCards = new List<PokemonCard>();
-
                 foreach (var apiCard in apiCards)
                 {
-                    // Skip cards with blank Pack
                     if (string.IsNullOrWhiteSpace(apiCard.Pack))
                         continue;
-
                     var convertedRarity = ConvertRarity(apiCard.Rarity);
                     var cardNumber = GetCardNumber(apiCard.Id);
-
                     if (existingCards.TryGetValue(apiCard.Id, out var existingCard))
                     {
                         existingCard.Name = apiCard.Name;
@@ -75,7 +65,7 @@ namespace BlazorApp3.Controllers
                         existingCard.Rarity = convertedRarity;
                         existingCard.CardNumber = cardNumber;
                         existingCard.ImageUrl = apiCard.Image;
-                        existingCard.Type = ""; // Not present in API
+                        existingCard.Type = apiCard.Type;
                         existingCard.UpdatedAt = DateTime.UtcNow;
                         updatedCards.Add(existingCard);
                     }
@@ -88,21 +78,17 @@ namespace BlazorApp3.Controllers
                             Pack = apiCard.Pack,
                             Rarity = convertedRarity,
                             CardNumber = cardNumber,
-                            
                             ImageUrl = apiCard.Image,
-                            Type = "",
+                            Type = apiCard.Type,
                             CreatedAt = DateTime.UtcNow,
                             UpdatedAt = DateTime.UtcNow
                         };
                         newCards.Add(newCard);
                     }
                 }
-
                 if (newCards.Any())
                     _context.PokemonCards.AddRange(newCards);
-
                 await _context.SaveChangesAsync();
-
                 return Ok(new
                 {
                     Message = "Cards synchronized successfully",
@@ -117,7 +103,6 @@ namespace BlazorApp3.Controllers
             }
         }
 
-        // Helper: Converts rarity symbols to readable names
         private string ConvertRarity(string raritySymbols)
         {
             return raritySymbols?.Trim() switch
@@ -125,12 +110,17 @@ namespace BlazorApp3.Controllers
                 "◊" => "Common",
                 "◊◊" => "Uncommon",
                 "◊◊◊" => "Rare",
-                "◊◊◊◊" => "Ultra Rare",
-                _ => "Unknown",
+                "◊◊◊◊" => "EX Cards",
+                "☆" => "Full Art",
+                "☆☆" => "Enhanced Full Art",
+                "☆☆☆" => "Immersive",
+                "♕" => "Gold",
+                "Promo" => "Promo",
+                "Shop" => "Shop Exclusive",
+                _ => "Other"
             };
         }
 
-        // Helper: Extracts card number from id (e.g., "a1-055" => "055")
         private string GetCardNumber(string id)
         {
             if (string.IsNullOrWhiteSpace(id)) return "";
@@ -138,8 +128,6 @@ namespace BlazorApp3.Controllers
             return parts.Length > 1 ? parts[1] : "";
         }
 
-        // GET: api/PokemonCollection/my-collection
-        // Now allows anonymous users and returns an empty list if not signed in
         [HttpGet("my-collection")]
         [AllowAnonymous]
         public async Task<ActionResult<List<CardCollectionDto>>> GetMyCollection(
@@ -149,11 +137,7 @@ namespace BlazorApp3.Controllers
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
-            {
-                // Not authenticated → treat as “no cards owned”
                 return Ok(new List<CardCollectionDto>());
-            }
-
             var collection = await _context.GetUserCollectionAsync(userId, pack, rarity, isCollected);
             return Ok(collection);
         }
@@ -163,13 +147,10 @@ namespace BlazorApp3.Controllers
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
-
             var card = await _context.PokemonCards.FindAsync(request.CardId);
             if (card == null) return NotFound("Card not found");
-
             var existingUserCard = await _context.UserCards
                 .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CardId == request.CardId);
-
             if (existingUserCard != null)
             {
                 existingUserCard.Quantity += request.Quantity;
@@ -187,10 +168,8 @@ namespace BlazorApp3.Controllers
                 };
                 _context.UserCards.Add(userCard);
             }
-
             await _context.SaveChangesAsync();
             await _context.UpdateUserStatsAsync(userId);
-
             return Ok(new { Message = "Card added to collection" });
         }
 
@@ -199,16 +178,12 @@ namespace BlazorApp3.Controllers
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
-
             var userCard = await _context.UserCards
                 .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CardId == cardId);
-
             if (userCard == null) return NotFound("Card not in collection");
-
             _context.UserCards.Remove(userCard);
             await _context.SaveChangesAsync();
             await _context.UpdateUserStatsAsync(userId);
-
             return Ok(new { Message = "Card removed from collection" });
         }
 
@@ -222,27 +197,66 @@ namespace BlazorApp3.Controllers
         }
 
         [HttpGet("leaderboard")]
-        public async Task<ActionResult<List<LeaderboardEntry>>> GetLeaderboard([FromQuery] int limit = 10)
+        public async Task<ActionResult<List<LeaderboardEntry>>> GetLeaderboard([FromQuery] int limit = 10, [FromQuery] string? pack = null)
         {
-            var leaderboard = await _context.UserStats
-                .Include(us => us.User)
-                .OrderByDescending(us => us.UniqueCards)
-                .ThenByDescending(us => us.TotalCards)
-                .Take(limit)
-                .Select(us => new LeaderboardEntry
-                {
-                    UserName = us.User.UserName ?? "Unknown",
-                    UniqueCards = us.UniqueCards,
-                    TotalCards = us.TotalCards,
-                    CompletionPercentage = us.UniqueCards > 0
-                        ? Math.Round((decimal)us.UniqueCards / _context.PokemonCards.Count() * 100, 2)
-                        : 0,
-                    BountiesCompleted = us.BountiesCompleted,
-                    TradesCompleted = us.TradesCompleted
-                })
+            if (string.IsNullOrEmpty(pack) || pack == "All")
+            {
+                var totalCardsCount = await _context.PokemonCards.CountAsync();
+                var topUsers = await _context.UserStats
+                    .Include(us => us.User)
+                    .OrderByDescending(us => us.UniqueCards)
+                    .ThenByDescending(us => us.TotalCards)
+                    .Take(limit)
+                    .Select(us => new LeaderboardEntry
+                    {
+                        UserName = us.User.UserName ?? "Unknown",
+                        UniqueCards = us.UniqueCards,
+                        TotalCards = us.TotalCards,
+                        CompletionPercentage = us.UniqueCards > 0
+                            ? Math.Round((decimal)us.UniqueCards / totalCardsCount * 100, 2)
+                            : 0,
+                        BountiesCompleted = us.BountiesCompleted,
+                        TradesCompleted = us.TradesCompleted
+                    })
+                    .ToListAsync();
+                return Ok(topUsers);
+            }
+            var cardsInPack = await _context.PokemonCards
+                .Where(c => c.Pack == pack)
+                .Select(c => c.Id)
                 .ToListAsync();
-
-            return Ok(leaderboard);
+            var totalPackCount = cardsInPack.Count;
+            var statsInPack = await _context.UserCards
+                .Where(uc => cardsInPack.Contains(uc.CardId))
+                .GroupBy(uc => uc.UserId)
+                .Select(g => new
+                {
+                    UserId = g.Key,
+                    UniqueCount = g.Select(x => x.CardId).Distinct().Count(),
+                    TotalCount = g.Sum(x => x.Quantity)
+                })
+                .OrderByDescending(x => x.UniqueCount)
+                .Take(limit)
+                .ToListAsync();
+            var result = new List<LeaderboardEntry>();
+            foreach (var u in statsInPack)
+            {
+                var userEntity = await _context.Users.FindAsync(u.UserId);
+                var stats = await _context.UserStats.FindAsync(u.UserId);
+                var pct = totalPackCount > 0
+                    ? Math.Round((decimal)u.UniqueCount / totalPackCount * 100, 2)
+                    : 0;
+                result.Add(new LeaderboardEntry
+                {
+                    UserName = userEntity?.UserName ?? "Unknown",
+                    UniqueCards = u.UniqueCount,
+                    TotalCards = u.TotalCount,
+                    CompletionPercentage = pct,
+                    BountiesCompleted = stats?.BountiesCompleted ?? 0,
+                    TradesCompleted = stats?.TradesCompleted ?? 0
+                });
+            }
+            return Ok(result);
         }
 
         [HttpGet("cards")]
@@ -253,7 +267,6 @@ namespace BlazorApp3.Controllers
                 .OrderBy(c => c.Pack)
                 .ThenBy(c => c.CardNumber)
                 .ToListAsync();
-
             return Ok(cards);
         }
 
@@ -266,7 +279,6 @@ namespace BlazorApp3.Controllers
                 .Distinct()
                 .OrderBy(p => p)
                 .ToListAsync();
-
             return Ok(packs);
         }
 
@@ -279,7 +291,6 @@ namespace BlazorApp3.Controllers
                 .Distinct()
                 .OrderBy(r => r)
                 .ToListAsync();
-
             return Ok(rarities);
         }
 
@@ -288,20 +299,15 @@ namespace BlazorApp3.Controllers
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
-
             var userCard = await _context.UserCards
                 .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CardId == cardId);
-
             if (userCard == null) return NotFound("Card not in collection");
-
             userCard.IsForTrade = !userCard.IsForTrade;
             await _context.SaveChangesAsync();
-
             return Ok(new { Message = "Trade status updated", IsForTrade = userCard.IsForTrade });
         }
     }
 
-    // -- API MODEL FOR REMOTE JSON DATA --
     public class ApiPokemonCard
     {
         public string Id { get; set; } = "";
@@ -309,14 +315,14 @@ namespace BlazorApp3.Controllers
         public string Rarity { get; set; } = "";
         public string Pack { get; set; } = "";
         public string Health { get; set; } = "";
-
+        public string Type { get; set; } = "";
         public string Expansion { get; set; } = "";
         public string Image { get; set; } = "";
         public string FullArt { get; set; } = "";
         public string Ex { get; set; } = "";
         public string Artist { get; set; } = "";
     }
-    // -- DTOs for API responses and requests --
+
     public class CardCollectionDto
     {
         public string CardId { get; set; } = "";

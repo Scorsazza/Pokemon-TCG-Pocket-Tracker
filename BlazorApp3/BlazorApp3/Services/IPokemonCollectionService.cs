@@ -13,7 +13,8 @@ namespace BlazorApp3.Services
         Task SetQuantityAsync(string userId, string cardId, int quantity);
         Task AddCardAsync(string userId, AddCardRequest req);
         Task RemoveCardAsync(string userId, string cardId);
-        Task<List<LeaderboardEntry>> GetLeaderboardAsync(int top = 10);
+        Task<List<LeaderboardEntry>> GetLeaderboardAsync(int top = 10, string? packFilter = null);
         Task ToggleTradeAsync(string userId, string cardId);
+        Task<List<string>> GetAllExpansionsAsync();
     }
 }
