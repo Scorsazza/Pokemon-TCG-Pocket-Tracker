@@ -1,0 +1,75 @@
+﻿@page "/CSV"
+@using BlazorApp3.Data.Models
+@using System.Security.Claims
+@using BlazorApp3.Services
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject IWebHostEnvironment Environment
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>CSV Import</PageTitle>
+
+<h1>CSV Import</h1>
+
+<InputFile OnChange="FileUploaded" accept=".csv"/>
+
+
+@code {
+    public Boolean fileRead = false;
+
+
+    public string ErrorMessage { get; set; } = "";
+
+    const int maxFileSize = 1024 * 1024 * 50; // 50 MB is Max File Size - should be no way the CSVs are bigger than that
+
+    public async Task FileUploaded(InputFileChangeEventArgs e)
+    {
+
+        //Not letting them upload a CSV unless they are logged in
+
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        var uid = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (uid == null)
+        {
+            await JS.InvokeVoidAsync("alert", "Please login before uploading a .csv file");
+            return;
+        }
+
+        var csvFile = e.File;
+
+        //Preventing any files which aren't .csv
+
+        if(Path.GetExtension(csvFile.Name) != ".csv")
+        {
+            ErrorMessage = "Unsupported file type - please upload a .csv file";
+            await JS.InvokeVoidAsync("alert", ErrorMessage);
+            return;
+        }
+
+        if (csvFile != null)
+        {
+            try
+            {
+
+                //Creating the folder and the random file name for the CSV file to be stored temporarily
+
+                string folderPath = Environment.WebRootPath + "\\CSV\\" + uid;
+                string fileName = DateTime.Now.ToString("yyyy-MM-dd-hh-mm-ss") + Path.ChangeExtension(Path.GetRandomFileName(), Path.GetExtension(csvFile.Name));
+
+                if (Directory.Exists(folderPath) == false)
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+
+                await using FileStream fs = new(folderPath + "\\" + fileName, FileMode.Create);
+                await csvFile.OpenReadStream(maxFileSize).CopyToAsync(fs);
+            }
+            catch (Exception exception)
+            {
+                ErrorMessage = exception.Message;
+                await JS.InvokeVoidAsync("alert", ErrorMessage);
+                return;
+            }
+        }     
+    }
+}

@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -124,6 +125,7 @@ app.MapRazorComponents<App>()
    .AddInteractiveServerRenderMode()
    .AddInteractiveWebAssemblyRenderMode()
    .AddAdditionalAssemblies(typeof(BlazorApp3.Client._Imports).Assembly);
+
 
 // Health check
 app.MapGet("/api/test", () => "API works!");
