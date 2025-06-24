@@ -15,14 +15,11 @@
 
 
 @code {
-    public Boolean fileRead = false;
-
-
     public string ErrorMessage { get; set; } = "";
 
     const int maxFileSize = 1024 * 1024 * 50; // 50 MB is Max File Size - should be no way the CSVs are bigger than that
 
-    public async Task FileUploaded(InputFileChangeEventArgs e)
+    private async Task FileUploaded(InputFileChangeEventArgs e)
     {
 
         //Not letting them upload a CSV unless they are logged in
@@ -63,6 +60,32 @@
 
                 await using FileStream fs = new(folderPath + "\\" + fileName, FileMode.Create);
                 await csvFile.OpenReadStream(maxFileSize).CopyToAsync(fs);
+                fs.Close();
+
+                /* - Is a test function so commenting out
+
+                List<string> _lines = [];
+
+                using (StreamReader reader = new StreamReader(folderPath + "\\" + fileName))
+                {
+                    string line;
+
+                    if ((line = await reader.ReadLineAsync()) != null)
+                    {
+                        _lines.Add(line);
+                        Console.WriteLine(line);
+                        reader.Close();
+                    }
+                }
+                */
+
+                //Deleting file after we are done with it
+
+                if (System.IO.File.Exists(folderPath + "\\" + fileName))
+                {
+                    System.IO.File.Delete(folderPath + "\\" + fileName);
+                }
+
             }
             catch (Exception exception)
             {
@@ -71,5 +94,11 @@
                 return;
             }
         }     
+    }
+
+    //Function to read CSV
+    private void readCSV(string filePath)
+    {
+        
     }
 }
