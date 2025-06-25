@@ -61,9 +61,9 @@
                 await using FileStream fs = new(folderPath + "\\" + fileName, FileMode.Create);
                 await csvFile.OpenReadStream(maxFileSize).CopyToAsync(fs);
                 fs.Close();
-
+                
                 /* - Is a test function so commenting out
-
+ 
                 List<string> _lines = [];
 
                 using (StreamReader reader = new StreamReader(folderPath + "\\" + fileName))

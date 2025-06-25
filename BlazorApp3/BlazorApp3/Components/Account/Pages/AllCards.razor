@@ -305,12 +305,27 @@
             "Common", "Uncommon", "Rare", "EX Cards", "Full Art",
             "Enhanced Full Art", "Immersive", "Gold", "Promo"
         };
-        var TypeOrder = new[]
+        var typeOrder = new[]
         {
             "Grass", "Fire", "Water", "Lightning",
             "Psychic", "Fighting", "Darkness", "Metal",
             "Dragon", "Colorless"
         };
+        var expansionOrder = new[]
+{
+            "Genetic Apex", "Mythical Island", "Space-Time Smackdown",
+            "Triumphant Light", "Shining Revelry", "Celestial Guardians",
+            "Extradimensional Crisis", "Eevee Grove"
+        };
+
+        var packOrder = new[]
+            {
+                "Charizard", "Mewtwo", "Pikachu", "Shared(Genetic Apex)", "Mythical Island",
+                "Dialga", "Palkia", "Shared(Space-Time Smackdown)", "Triumphant Light",
+                "Shining Revelry", "Solgaleo", "Lunala", "Shared(Celestial Guardians)",
+                "Extradimensional Crisis", "Eevee Grove", "Promo Cards", "Campaign", "Wonder pick",
+                "Missions", "Premium Missions", "Shop"
+            };
 
         var filtered = viewCards.AsEnumerable();
 
@@ -341,22 +356,61 @@
 
         filtered = sortBy switch
         {
-            "name" => filtered.OrderBy(c => c.Name),
-            "pack" => filtered.OrderBy(c => c.Pack).ThenBy(c => c.CardNumber),
+            //Sorts by Name then Expansion Order
+            "name" => filtered
+            .OrderBy(c => c.Name)
+            .ThenBy(c => Array.IndexOf(expansionOrder, c.Expansion) == -1
+                ? int.MaxValue
+                : Array.IndexOf(expansionOrder, c.Expansion)),
+
+            //Sorts via release Pack Order then by Card Number
+            "pack" => filtered
+            .OrderBy(c => Array.IndexOf(packOrder, c.Pack) == -1
+                ? int.MaxValue
+                : Array.IndexOf(packOrder, c.Pack))
+            .ThenBy(c => c.CardNumber),
+
+            //Sorts by Rarity Order then Card Number then Expansion Order
             "rarity" => filtered
                 .OrderBy(c => Array.IndexOf(rarityOrder, c.Rarity) == -1
                     ? int.MaxValue
                     : Array.IndexOf(rarityOrder, c.Rarity))
-                .ThenBy(c => c.Name),
+                .ThenBy(c => c.CardNumber)
+                .ThenBy(c => Array.IndexOf(expansionOrder, c.Expansion) == -1
+                ? int.MaxValue
+                : Array.IndexOf(expansionOrder, c.Expansion)),
+
+            //Sorts by Type then Card Number then Expansion Order
             "type" => filtered
-                .OrderBy(c => Array.IndexOf(TypeOrder, c.Type) == -1
+                .OrderBy(c => Array.IndexOf(typeOrder, c.Type) == -1
                     ? int.MaxValue
-                    : Array.IndexOf(TypeOrder, c.Type))
-                .ThenBy(c => c.Name),
-            "expansion" => filtered.OrderBy(c => c.Expansion).ThenBy(c => c.Pack).ThenBy(c => c.CardNumber),
-            "number" => filtered.OrderBy(c =>
-                int.TryParse(c.CardNumber, out var num) ? num : int.MaxValue),
-            _ => filtered.OrderBy(c => c.CardNumber)
+                    : Array.IndexOf(typeOrder, c.Type))
+                .ThenBy(c => c.CardNumber)
+                .ThenBy(c => Array.IndexOf(expansionOrder, c.Expansion) == -1
+                ? int.MaxValue
+                : Array.IndexOf(expansionOrder, c.Expansion)),
+
+
+            //Sorts by Expansion Order then Card Number
+            "expansion" => filtered
+            .OrderBy(c => Array.IndexOf(expansionOrder, c.Expansion) == -1
+                ? int.MaxValue
+                : Array.IndexOf(expansionOrder, c.Expansion))
+                .ThenBy(c => c.CardNumber),
+
+            //Sorts By Card Number then Expansion Order
+            "number" => filtered
+            .OrderBy(c => c.CardNumber)
+            .ThenBy(c => Array.IndexOf(expansionOrder, c.Expansion) == -1
+                ? int.MaxValue
+                : Array.IndexOf(expansionOrder, c.Expansion)),
+
+            //Sorts by Newest (not implemented yet, so defaulting to Card Number to avoid errors when selecting this option)
+            "newest" => filtered
+            .OrderBy(c => c.CardNumber)
+            .ThenBy(c => Array.IndexOf(expansionOrder, c.Expansion) == -1
+                ? int.MaxValue
+                : Array.IndexOf(expansionOrder, c.Expansion))
         };
 
         filteredCards = filtered.ToList();
